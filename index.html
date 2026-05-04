@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>꼬맹이 건강 다이어리</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="꼬맹이">
+    <meta name="theme-color" content="#9B8EC4">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        :root {
+            --primary:#9B8EC4; --primary-light:#D4CCF0; --primary-dark:#7A6AAF;
+            --bg:#F5F3FA; --card:#FFFFFF; --text:#2D2D2D; --text-light:#909090;
+            --success:#5BAD8F; --danger:#E57373; --warning:#F5A623;
+            --border:#EAE6F5; --nav-height:66px; --header-height:58px;
+        }
+        body { font-family:-apple-system,BlinkMacSystemFont,'Noto Sans KR','Segoe UI',sans-serif; background:var(--bg); color:var(--text); max-width:430px; margin:0 auto; min-height:100vh; }
+
+        /* ─── Header ─── */
+        .app-header { position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:430px; height:var(--header-height); background:var(--primary); color:white; display:flex; align-items:center; justify-content:space-between; padding:0 18px; z-index:100; box-shadow:0 2px 10px rgba(155,142,196,.35); }
+        .app-header h1 { font-size:15px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .app-header .today-date { font-size:12px; opacity:.88; white-space:nowrap; flex-shrink:0; margin-left:8px; }
+
+        /* ─── Main ─── */
+        .app-main { padding-top:calc(var(--header-height) + 10px); padding-bottom:calc(var(--nav-height) + 10px); }
+
+        /* ─── Bottom Nav ─── */
+        .bottom-nav { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:430px; height:var(--nav-height); background:white; border-top:1px solid var(--border); display:flex; z-index:100; padding-bottom:env(safe-area-inset-bottom); }
+        .nav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; border:none; background:none; color:var(--text-light); font-size:10px; font-weight:600; padding:8px 0; transition:color .15s; }
+        .nav-item .nav-icon { font-size:20px; line-height:1; }
+        .nav-item.active { color:var(--primary); }
+
+        /* ─── Views ─── */
+        .view { display:none; padding:0 12px; }
+        .view.active { display:block; }
+
+        /* ─── Card ─── */
+        .card { background:var(--card); border-radius:16px; padding:16px; margin-bottom:11px; box-shadow:0 1px 6px rgba(0,0,0,.07); }
+        .card-title { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.8px; margin-bottom:13px; }
+
+        /* ─── Record Buttons ─── */
+        .record-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+        .record-btn { background:var(--bg); border:2px solid var(--border); border-radius:14px; padding:14px 8px; display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; transition:all .12s; min-height:82px; user-select:none; }
+        .record-btn:active { transform:scale(.93); background:var(--primary-light); border-color:var(--primary); }
+        .record-btn .btn-icon { font-size:28px; line-height:1; display:flex; align-items:center; justify-content:center; }
+        .record-btn .btn-label { font-size:14px; font-weight:700; }
+        .record-btn .btn-count { font-size:11px; color:var(--text-light); }
+        .record-btn.full-width { grid-column:span 2; flex-direction:row; justify-content:center; gap:10px; min-height:62px; }
+        .record-btn.full-width .btn-icon { font-size:24px; }
+
+        /* ─── Medication List ─── */
+        .med-item { display:flex; align-items:center; padding:11px 0; border-bottom:1px solid var(--border); gap:12px; }
+        .med-item:last-child { border-bottom:none; padding-bottom:0; }
+        .med-item:first-child { padding-top:0; }
+        .med-check-btn { width:42px; height:42px; border-radius:50%; border:2.5px solid var(--border); background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px; transition:all .18s; flex-shrink:0; }
+        .med-check-btn.done { background:var(--success); border-color:var(--success); color:white; }
+        .med-info { flex:1; min-width:0; }
+        .med-name { font-size:15px; font-weight:600; }
+        .med-period { font-size:12px; color:var(--text-light); margin-top:2px; }
+        .med-badge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
+        .med-badge.done { background:#E8F5EE; color:var(--success); }
+        .med-badge.pending { background:#FFF8EE; color:var(--warning); }
+
+        /* ─── Today Records ─── */
+        .rec-item { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
+        .rec-item:last-child { border-bottom:none; padding-bottom:0; }
+        .rec-item:first-child { padding-top:0; }
+        .rec-icon { font-size:22px; width:30px; text-align:center; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+        .rec-info { flex:1; min-width:0; }
+        .rec-label { font-size:13px; font-weight:600; }
+        .rec-time { font-size:11px; color:var(--text-light); margin-top:1px; }
+        .rec-amount { font-size:13px; font-weight:700; color:var(--primary); flex-shrink:0; }
+        .rec-del-btn { width:28px; height:28px; border-radius:50%; border:none; background:#FFEBEE; color:var(--danger); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+        /* ─── Calendar ─── */
+        .cal-nav { display:flex; align-items:center; justify-content:space-between; padding:0 4px; margin-bottom:14px; }
+        .cal-nav-btn { width:38px; height:38px; border:none; background:var(--bg); border-radius:50%; font-size:15px; cursor:pointer; transition:background .15s; }
+        .cal-nav-btn:active { background:var(--primary-light); }
+        .cal-month-label { font-size:18px; font-weight:700; }
+        .cal-weekdays { display:grid; grid-template-columns:repeat(7,1fr); text-align:center; margin-bottom:3px; }
+        .cal-wd { font-size:11px; font-weight:600; color:var(--text-light); padding:3px 0; }
+        .cal-wd.sun { color:#E57373; } .cal-wd.sat { color:#7986CB; }
+        .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; }
+        .cal-day { display:flex; flex-direction:column; align-items:center; padding:2px 1px 4px; border-radius:6px; cursor:pointer; min-height:52px; transition:background .1s; }
+        .cal-day:active { background:var(--primary-light); }
+        .cal-day.today { background:var(--primary-light); }
+        .cal-day.other-month { opacity:.28; }
+        .cal-day-num { font-size:12px; font-weight:600; padding:2px 0; line-height:1; }
+        .cal-day.sun .cal-day-num { color:#E57373; }
+        .cal-day.sat .cal-day-num { color:#7986CB; }
+        .cal-day.today .cal-day-num { background:var(--primary); color:white; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; }
+        .cal-line { font-size:9px; line-height:1.6; width:100%; text-align:center; white-space:nowrap; color:var(--text); overflow:hidden; text-overflow:ellipsis; }
+
+        /* ─── Calendar Legend ─── */
+        .cal-legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; color:var(--text-light); }
+
+        /* ─── Day Detail Panel ─── */
+        .day-detail-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .day-detail-title { font-size:15px; font-weight:700; }
+        .day-detail-close { width:28px; height:28px; border-radius:50%; border:none; background:var(--bg); cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; }
+        .detail-item { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); font-size:14px; }
+        .detail-item:last-child { border-bottom:none; }
+        .detail-time-btn { background:none; border:none; cursor:pointer; color:var(--primary); font-size:11px; font-weight:600; text-decoration:underline; padding:0 2px; white-space:nowrap; flex-shrink:0; }
+        .detail-section-label { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.6px; padding:8px 0 4px; }
+
+        /* ─── Graph ─── */
+        .period-tabs { display:flex; gap:8px; margin-bottom:14px; }
+        .period-tab { flex:1; padding:8px; text-align:center; border-radius:8px; border:2px solid var(--border); cursor:pointer; font-size:13px; font-weight:700; background:none; color:var(--text-light); transition:all .15s; }
+        .period-tab.active { background:var(--primary); border-color:var(--primary); color:white; }
+        .chart-wrap { position:relative; width:100%; height:200px; }
+        .chart-subtitle { font-size:13px; font-weight:700; color:var(--text); margin-bottom:10px; }
+
+        /* ─── Memo View ─── */
+        .memo-card { background:var(--card); border-radius:14px; padding:14px; margin-bottom:10px; box-shadow:0 1px 5px rgba(0,0,0,.06); }
+        .memo-card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; }
+        .memo-card-title { font-size:15px; font-weight:700; }
+        .memo-card-date { font-size:11px; color:var(--text-light); margin-top:3px; }
+        .memo-card-body { font-size:13px; line-height:1.65; color:var(--text); white-space:pre-wrap; }
+
+        /* ─── Settings ─── */
+        .med-setting-item { display:flex; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); gap:10px; }
+        .med-setting-item:last-child { border-bottom:none; padding-bottom:0; }
+        .med-setting-item:first-child { padding-top:0; }
+        .med-setting-info { flex:1; min-width:0; }
+        .med-setting-name { font-size:15px; font-weight:600; }
+        .med-setting-detail { font-size:12px; color:var(--text-light); margin-top:2px; }
+        .icon-btn { width:36px; height:36px; border-radius:8px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; }
+        .edit-btn { background:#EDE9F8; color:var(--primary-dark); }
+        .add-btn { width:100%; padding:13px; border-radius:12px; border:2px dashed var(--primary-light); background:none; color:var(--primary); font-size:14px; font-weight:700; cursor:pointer; margin-top:8px; }
+
+        /* ─── Modal ─── */
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; align-items:flex-end; justify-content:center; }
+        .modal-overlay.show { display:flex; }
+        .modal-sheet { background:white; width:100%; max-width:430px; border-radius:22px 22px 0 0; padding:0 20px; max-height:88vh; overflow-y:auto; padding-bottom:max(32px,env(safe-area-inset-bottom)); }
+        .modal-handle { width:40px; height:4px; background:var(--border); border-radius:2px; margin:14px auto 18px; }
+        .modal-title { font-size:18px; font-weight:700; margin-bottom:18px; text-align:center; }
+        .form-group { margin-bottom:14px; }
+        .form-label { font-size:12px; font-weight:700; color:var(--text-light); margin-bottom:6px; display:block; }
+        .form-input { width:100%; padding:12px 14px; border:2px solid var(--border); border-radius:10px; font-size:16px; outline:none; transition:border-color .15s; background:white; color:var(--text); -webkit-appearance:none; }
+        .form-input:focus { border-color:var(--primary); }
+        textarea.form-input { resize:vertical; min-height:90px; font-family:inherit; }
+        .modal-btns { display:flex; gap:8px; margin-top:18px; }
+        .btn-cancel { flex:1; padding:14px; border-radius:12px; border:2px solid var(--border); background:none; font-size:15px; font-weight:700; cursor:pointer; color:var(--text-light); }
+        .btn-confirm { flex:2; padding:14px; border-radius:12px; border:none; background:var(--primary); color:white; font-size:15px; font-weight:700; cursor:pointer; }
+        .modal-type-btn { display:flex; align-items:center; gap:12px; padding:13px 16px; border-radius:13px; border:2px solid var(--border); background:var(--bg); font-size:16px; font-weight:600; color:var(--text); cursor:pointer; text-align:left; transition:all .12s; width:100%; }
+        .modal-type-btn:active { background:var(--primary-light); border-color:var(--primary); }
+        .modal-type-btn.med-done-btn { background:#f0faf5; border-color:var(--success); opacity:.85; }
+        .btn-del { flex:1; padding:14px; border-radius:12px; border:none; background:var(--danger); color:white; font-size:15px; font-weight:700; cursor:pointer; }
+        .period-chips { display:flex; flex-wrap:wrap; gap:8px; }
+        .p-chip { padding:9px 15px; border-radius:20px; border:2px solid var(--border); background:none; font-size:13px; font-weight:700; cursor:pointer; color:var(--text-light); transition:all .12s; }
+        .p-chip.on { background:var(--primary); border-color:var(--primary); color:white; }
+
+        /* ─── Empty / Toast ─── */
+        .empty { text-align:center; padding:20px 0; color:var(--text-light); font-size:13px; }
+        .empty-icon { font-size:32px; margin-bottom:6px; }
+        .toast { position:fixed; bottom:calc(var(--nav-height)+14px); left:50%; transform:translateX(-50%) translateY(20px); background:#333; color:white; padding:9px 20px; border-radius:20px; font-size:13px; font-weight:600; opacity:0; transition:all .25s; z-index:300; white-space:nowrap; pointer-events:none; }
+        .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body>
+
+<header class="app-header">
+    <h1>🐈 꼬맹이 건강 다이어리</h1>
+    <span class="today-date" id="header-date"></span>
+</header>
+
+<main class="app-main">
+
+    <!-- ── 홈 ── -->
+    <div id="view-home" class="view active">
+        <div class="card">
+            <div class="card-title">기록하기</div>
+            <div class="record-grid">
+                <button class="record-btn" onclick="openRecordModal('urine')">
+                    <span class="btn-icon" id="urine-btn-icon"></span>
+                    <span class="btn-label">소변</span>
+                    <span class="btn-count" id="cnt-urine">오늘 0회</span>
+                </button>
+                <button class="record-btn" onclick="openRecordModal('feces')">
+                    <span class="btn-icon">💩</span>
+                    <span class="btn-label">대변</span>
+                    <span class="btn-count" id="cnt-feces">오늘 0회</span>
+                </button>
+                <button class="record-btn full-width" onclick="openRecordModal('fluids')">
+                    <span class="btn-icon">💧</span>
+                    <span class="btn-label">피하수액</span>
+                    <span class="btn-count" id="cnt-fluids">오늘 0 ml</span>
+                </button>
+                <button class="record-btn" onclick="openRecordModal('dry_food')">
+                    <span class="btn-icon">🍴</span>
+                    <span class="btn-label">건사료</span>
+                    <span class="btn-count" id="cnt-dry">오늘 0 g</span>
+                </button>
+                <button class="record-btn" onclick="openRecordModal('wet_food')">
+                    <span class="btn-icon">🥫</span>
+                    <span class="btn-label">습식사료</span>
+                    <span class="btn-count" id="cnt-wet">오늘 0 g</span>
+                </button>
+                <button class="record-btn full-width" onclick="openMemoModal()" style="min-height:54px;border-color:var(--primary-light);">
+                    <span class="btn-icon" style="font-size:22px">⭐</span>
+                    <span class="btn-label" style="color:var(--primary)">특이사항 메모</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">오늘의 투약</div>
+            <div id="med-list-home"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">오늘 기록 내역</div>
+            <div id="today-records"></div>
+        </div>
+    </div>
+
+    <!-- ── 달력 ── -->
+    <div id="view-calendar" class="view">
+        <div class="card">
+            <div class="cal-nav">
+                <button class="cal-nav-btn" onclick="changeMonth(-1)">◀</button>
+                <span class="cal-month-label" id="cal-label"></span>
+                <button class="cal-nav-btn" onclick="changeMonth(1)">▶</button>
+            </div>
+            <div class="cal-weekdays">
+                <div class="cal-wd sun">일</div><div class="cal-wd">월</div>
+                <div class="cal-wd">화</div><div class="cal-wd">수</div>
+                <div class="cal-wd">목</div><div class="cal-wd">금</div>
+                <div class="cal-wd sat">토</div>
+            </div>
+            <div class="cal-grid" id="cal-grid"></div>
+        </div>
+        <div class="card" style="padding:12px 16px;">
+            <div class="cal-legend">
+                <span>💊 투약완료</span><span>💛 소변</span><span>💩 대변</span>
+                <span>💧 피하수액</span><span>🍴 건사료</span><span>🥫 습식사료</span><span>⭐ 특이사항</span>
+            </div>
+        </div>
+        <!-- 날짜별 상세 패널 (달력 하단) -->
+        <div class="card" id="day-detail-panel" style="display:none">
+            <div id="day-detail-content"></div>
+        </div>
+    </div>
+
+    <!-- ── 그래프 ── -->
+    <div id="view-graph" class="view">
+        <div class="card">
+            <div class="card-title">기간 선택</div>
+            <div class="period-tabs">
+                <button class="period-tab active" onclick="setPeriod(7,this)">7일</button>
+                <button class="period-tab" onclick="setPeriod(14,this)">14일</button>
+                <button class="period-tab" onclick="setPeriod(30,this)">30일</button>
+            </div>
+        </div>
+        <div class="card">
+            <div class="chart-subtitle">🍴🥫 식사량 (g)</div>
+            <div class="chart-wrap"><canvas id="food-chart"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="chart-subtitle">💛💩 소변 · 대변 (회)</div>
+            <div class="chart-wrap"><canvas id="toilet-chart"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="chart-subtitle">💧 피하수액 (ml)</div>
+            <div class="chart-wrap"><canvas id="fluids-chart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- ── 특이사항 ── -->
+    <div id="view-memo" class="view">
+        <div id="memo-list-wrap"></div>
+    </div>
+
+    <!-- ── 설정 ── -->
+    <div id="view-settings" class="view">
+        <div class="card">
+            <div class="card-title">투약 관리</div>
+            <div id="med-settings-list"></div>
+            <button class="add-btn" onclick="openMedModal(null)">+ 약 추가하기</button>
+        </div>
+        <div class="card">
+            <div class="card-title">백업 / 복원</div>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;line-height:1.6">앱 오류에 대비해 주기적으로 백업하세요.<br>백업 파일은 JSON 형식으로 저장됩니다.</p>
+            <button class="add-btn" onclick="exportData()">📥 데이터 백업 (다운로드)</button>
+            <button class="add-btn" style="margin-top:8px" onclick="importData()">📤 데이터 복원 (불러오기)</button>
+        </div>
+    </div>
+
+</main>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+    <button class="nav-item active" onclick="showView('home',this)">
+        <span class="nav-icon">🏠</span><span>홈</span>
+    </button>
+    <button class="nav-item" onclick="showView('calendar',this)">
+        <span class="nav-icon">📅</span><span>달력</span>
+    </button>
+    <button class="nav-item" onclick="showView('graph',this)">
+        <span class="nav-icon">📊</span><span>그래프</span>
+    </button>
+    <button class="nav-item" onclick="showView('memo',this)">
+        <span class="nav-icon">⭐</span><span>특이사항</span>
+    </button>
+    <button class="nav-item" onclick="showView('settings',this)">
+        <span class="nav-icon">⚙️</span><span>설정</span>
+    </button>
+</nav>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="overlayClick(event)">
+    <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div id="modal-body"></div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//  아이콘 & 상수
+// ═══════════════════════════════════════════
+// 소변: 노란 물방울 + 검은 아웃라인
+// viewBox 0 0 20 28 (아래 호가 y=27까지 내려가므로 여백 포함)
+// 종횡비 20:28 유지해서 잘림 방지
+const DROP = (h=22) => { const w=Math.round(h*20/28); return `<svg width="${w}" height="${h}" viewBox="0 0 20 28" xmlns="http://www.w3.org/2000/svg"><path d="M10 1 C8 5 1 14 1 18 A9 9 0 0 0 19 18 C19 14 12 5 10 1Z" fill="#FFD700" stroke="#2D2D2D" stroke-width="1.6" stroke-linejoin="round"/><ellipse cx="7.5" cy="17" rx="2" ry="3" fill="rgba(255,255,255,0.38)" transform="rotate(-25,7.5,17)"/></svg>`; };
+
+const TYPES = {
+    urine:    { label:'소변',    icon:()=>'💛',     unit:'회',  hasAmt:false },
+    feces:    { label:'대변',    icon:()=>'💩',     unit:'회',  hasAmt:false },
+    fluids:   { label:'피하수액', icon:()=>'💧',     unit:'ml', hasAmt:true  },
+    dry_food: { label:'건사료',  icon:()=>'🍴',     unit:'g',  hasAmt:true  },
+    wet_food: { label:'습식사료', icon:()=>'🥫',     unit:'g',  hasAmt:true  },
+    memo:     { label:'특이사항', icon:()=>'⭐',     unit:'',   hasAmt:false },
+};
+const PERIODS = { morning:'아침', noon:'점심', evening:'저녁', night:'밤', once:'1일 1회' };
+const PERIOD_ORDER = ['morning','noon','evening','night','once'];
+function sortedPeriods(periods) {
+    return [...periods].sort((a,b) => PERIOD_ORDER.indexOf(a) - PERIOD_ORDER.indexOf(b));
+}
+
+// ═══════════════════════════════════════════
+//  데이터
+// ═══════════════════════════════════════════
+let records = [], meds = [];
+
+function load() {
+    records = JSON.parse(localStorage.getItem('km_records') || '[]');
+    meds = JSON.parse(localStorage.getItem('km_meds') || 'null');
+    if (!meds) {
+        meds = [
+            { id:uid(), name:'아조딜',     periods:['morning','evening'], active:true },
+            { id:uid(), name:'안티놀래피드', periods:['once'],             active:true },
+        ];
+        saveMeds();
+    }
+}
+function saveRecords() { localStorage.setItem('km_records', JSON.stringify(records)); }
+function saveMeds()    { localStorage.setItem('km_meds',    JSON.stringify(meds)); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+// ─── 날짜 유틸 ───
+function dateStr(d) { d=d||new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function pad(n) { return String(n).padStart(2,'0'); }
+function today() { return dateStr(); }
+function nowTime() { const n=new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}`; }
+function fmtTime(t) { const [h,m]=t.split(':').map(Number); return `${h<12?'오전':'오후'} ${h===0?12:h>12?h-12:h}:${pad(m)}`; }
+function fmtDate(s) { const [y,mo,d]=s.split('-').map(Number); const days=['일','월','화','수','목','금','토']; return `${y}년 ${mo}월 ${d}일 (${days[new Date(y,mo-1,d).getDay()]})`; }
+
+// ─── 기록 쿼리 ───
+function recsFor(date) { return records.filter(r=>r.date===date); }
+function isMedDone(medId,period,date) { return records.some(r=>r.type==='med'&&r.medId===medId&&r.period===period&&r.date===date); }
+function todayCounts() {
+    const rs=recsFor(today());
+    return {
+        urine:    rs.filter(r=>r.type==='urine').length,
+        feces:    rs.filter(r=>r.type==='feces').length,
+        fluids:   rs.filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0),
+        dry_food: rs.filter(r=>r.type==='dry_food').reduce((s,r)=>s+(r.amt||0),0),
+        wet_food: rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0),
+    };
+}
+
+// ═══════════════════════════════════════════
+//  뷰 전환
+// ═══════════════════════════════════════════
+let currentView = 'home';
+function showView(view, btn) {
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    document.getElementById(`view-${view}`).classList.add('active');
+    if (btn) btn.classList.add('active');
+    currentView = view;
+    if (view==='home')     renderHome();
+    if (view==='calendar') renderCal();
+    if (view==='graph')    renderGraphs();
+    if (view==='memo')     renderMemos();
+    if (view==='settings') renderSettings();
+}
+
+// ═══════════════════════════════════════════
+//  홈 렌더
+// ═══════════════════════════════════════════
+function renderHome() {
+    // 소변 버튼 아이콘
+    const ui = document.getElementById('urine-btn-icon');
+    if (ui) ui.innerHTML = '💛';
+
+    const c = todayCounts();
+    document.getElementById('cnt-urine').textContent  = `오늘 ${c.urine}회`;
+    document.getElementById('cnt-feces').textContent  = `오늘 ${c.feces}회`;
+    document.getElementById('cnt-fluids').textContent = `오늘 ${c.fluids} ml`;
+    document.getElementById('cnt-dry').textContent    = `오늘 ${c.dry_food} g`;
+    document.getElementById('cnt-wet').textContent    = `오늘 ${c.wet_food} g`;
+
+    // 투약 목록 (아침→점심→저녁→밤→1일1회 순)
+    const activeMeds = meds.filter(m=>m.active);
+    const medEl = document.getElementById('med-list-home');
+    if (!activeMeds.length) {
+        medEl.innerHTML = `<div class="empty"><div class="empty-icon">💊</div>등록된 약이 없습니다.<br>설정에서 추가해 주세요.</div>`;
+    } else {
+        const allDoses = [];
+        activeMeds.forEach(med => sortedPeriods(med.periods).forEach(p => allDoses.push({med,p})));
+        medEl.innerHTML = allDoses.map(({med,p}) => {
+            const done = isMedDone(med.id, p, today());
+            return `<div class="med-item">
+                <button class="med-check-btn ${done?'done':''}" onclick="toggleMed('${med.id}','${p}')">
+                    ${done?'✓':''}
+                </button>
+                <div class="med-info">
+                    <div class="med-name">${med.name}</div>
+                    <div class="med-period">${PERIODS[p]||p}</div>
+                </div>
+                <span class="med-badge ${done?'done':'pending'}">${done?'완료':'미완료'}</span>
+            </div>`;
+        }).join('');
+    }
+
+    // 오늘 기록 내역 (투약 제외, 최신순)
+    const list = recsFor(today()).filter(r=>r.type!=='med').sort((a,b)=>b.time.localeCompare(a.time));
+    const listEl = document.getElementById('today-records');
+    if (!list.length) {
+        listEl.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>오늘 기록이 없습니다.</div>`;
+    } else {
+        listEl.innerHTML = list.map(r => {
+            if (r.type==='memo') {
+                return `<div class="rec-item">
+                    <span class="rec-icon">⭐</span>
+                    <div class="rec-info">
+                        <div class="rec-label">${r.title||'특이사항'}</div>
+                        <div class="rec-time">${fmtTime(r.time)}</div>
+                    </div>
+                    <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
+                </div>`;
+            }
+            const t = TYPES[r.type];
+            const iconHtml = t.icon();
+            const amt = t.hasAmt ? `${r.amt}${t.unit}` : '';
+            return `<div class="rec-item">
+                <span class="rec-icon">${iconHtml}</span>
+                <div class="rec-info">
+                    <div class="rec-label">${t.label}</div>
+                    <div class="rec-time">${fmtTime(r.time)}</div>
+                </div>
+                ${amt?`<span class="rec-amount">${amt}</span>`:''}
+                <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
+            </div>`;
+        }).join('');
+    }
+}
+
+function toggleMed(medId, period) {
+    const t = today();
+    const idx = records.findIndex(r=>r.type==='med'&&r.medId===medId&&r.period===period&&r.date===t);
+    if (idx>=0) { records.splice(idx,1); toast('투약 완료 취소'); }
+    else {
+        const med = meds.find(m=>m.id===medId);
+        records.push({id:uid(),type:'med',date:t,time:nowTime(),medId,period,medName:med?.name||''});
+        toast(`${med?.name||''} ${PERIODS[period]||period} 투약 완료! 💊`);
+    }
+    saveRecords(); renderHome();
+}
+
+function delRecord(id) {
+    records = records.filter(r=>r.id!==id);
+    saveRecords();
+    if (currentView==='home') renderHome();
+    if (currentView==='calendar') { renderCal(); if (selectedDay) openDayDetail(selectedDay); }
+    if (currentView==='memo') renderMemos();
+}
+
+// ═══════════════════════════════════════════
+//  기록 모달
+// ═══════════════════════════════════════════
+function openRecordModal(type, defaultDate) {
+    const t = TYPES[type];
+    const iconHtml = t.icon();
+    const dateVal = defaultDate || today();
+    const amtField = t.hasAmt ? `
+        <div class="form-group">
+            <label class="form-label">양 (${t.unit})</label>
+            <input type="number" class="form-input" id="m-amt" min="0" step="0.5" placeholder="양을 입력하세요" inputmode="decimal">
+        </div>` : '';
+    setModal('', `
+        <div class="modal-title">${iconHtml} ${t.label} 기록</div>
+        ${amtField}
+        <div class="form-group">
+            <label class="form-label">날짜</label>
+            <input type="date" class="form-input" id="m-date" value="${dateVal}" max="${today()}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">시간</label>
+            <input type="time" class="form-input" id="m-time" value="${nowTime()}">
+        </div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModal()">취소</button>
+            <button class="btn-confirm" onclick="saveRecord('${type}')">기록하기</button>
+        </div>`, true);
+    openModal();
+    if (t.hasAmt) setTimeout(()=>document.getElementById('m-amt')?.focus(), 120);
+}
+
+function saveRecord(type) {
+    const t = TYPES[type];
+    const date = document.getElementById('m-date').value;
+    const time = document.getElementById('m-time').value;
+    let amt = null;
+    if (t.hasAmt) {
+        const v = parseFloat(document.getElementById('m-amt').value);
+        if (isNaN(v)||v<0) { alert('양을 입력해 주세요.'); return; }
+        amt = v;
+    }
+    records.push({id:uid(),type,date,time,amt});
+    saveRecords(); closeModal();
+    toast(`${t.label} 기록 완료!`);
+    if (currentView==='home') renderHome();
+    if (currentView==='calendar') { renderCal(); if(selectedDay) openDayDetail(selectedDay); }
+}
+
+// ═══════════════════════════════════════════
+//  특이사항 메모
+// ═══════════════════════════════════════════
+function openMemoModal(editId, defaultDate) {
+    const existing = editId ? records.find(r=>r.id===editId) : null;
+    const dateVal = existing?.date || defaultDate || today();
+    setModal('⭐ 특이사항 메모', `
+        <div class="form-group">
+            <label class="form-label">제목 (달력에 표시됩니다 · 최대 6자)</label>
+            <input type="text" class="form-input" id="memo-title" maxlength="6"
+                value="${existing?.title||''}" placeholder="예: 구토, 식욕저하">
+        </div>
+        <div class="form-group">
+            <label class="form-label">상세 내용</label>
+            <textarea class="form-input" id="memo-body" placeholder="자세한 내용을 적어주세요...">${existing?.body||''}</textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">날짜</label>
+            <input type="date" class="form-input" id="memo-date" value="${dateVal}" max="${today()}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">시간</label>
+            <input type="time" class="form-input" id="memo-time" value="${existing?.time||nowTime()}">
+        </div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModal()">취소</button>
+            ${existing?`<button class="btn-del" onclick="delMemo('${editId}')">삭제</button>`:''}
+            <button class="btn-confirm" onclick="saveMemo('${editId||''}')">저장</button>
+        </div>
+    `);
+    openModal();
+    setTimeout(()=>document.getElementById('memo-title')?.focus(), 120);
+}
+
+function saveMemo(editId) {
+    const title = document.getElementById('memo-title').value.trim();
+    if (!title) { alert('제목을 입력해 주세요.'); return; }
+    const body  = document.getElementById('memo-body').value.trim();
+    const date  = document.getElementById('memo-date').value;
+    const time  = document.getElementById('memo-time').value;
+    if (editId) {
+        const r = records.find(r=>r.id===editId);
+        if (r) Object.assign(r, {title,body,date,time});
+    } else {
+        records.push({id:uid(),type:'memo',date,time,title,body});
+    }
+    saveRecords(); closeModal();
+    toast('특이사항이 기록되었습니다 ⭐');
+    if (currentView==='home') renderHome();
+    if (currentView==='calendar') { renderCal(); if(selectedDay) openDayDetail(selectedDay); }
+    if (currentView==='memo') renderMemos();
+}
+
+function delMemo(id) {
+    if (!confirm('이 메모를 삭제하시겠습니까?')) return;
+    records = records.filter(r=>r.id!==id);
+    saveRecords(); closeModal();
+    if (currentView==='memo') renderMemos();
+    if (currentView==='calendar') { renderCal(); if(selectedDay) openDayDetail(selectedDay); }
+    if (currentView==='home') renderHome();
+}
+
+function renderMemos() {
+    const memoRecs = records.filter(r=>r.type==='memo')
+        .sort((a,b)=>b.date.localeCompare(a.date)||b.time.localeCompare(a.time));
+    const wrap = document.getElementById('memo-list-wrap');
+    if (!memoRecs.length) {
+        wrap.innerHTML = `<div class="card"><div class="empty"><div class="empty-icon">⭐</div>기록된 특이사항이 없습니다.<br>홈 화면에서 추가할 수 있습니다.</div></div>`;
+        return;
+    }
+    wrap.innerHTML = memoRecs.map(r=>`
+        <div class="memo-card">
+            <div class="memo-card-header">
+                <div>
+                    <div class="memo-card-title">⭐ ${r.title}</div>
+                    <div class="memo-card-date">${fmtDate(r.date)} ${fmtTime(r.time)}</div>
+                </div>
+                <button class="icon-btn edit-btn" onclick="openMemoModal('${r.id}')">✏️</button>
+            </div>
+            ${r.body?`<div class="memo-card-body">${escHtml(r.body)}</div>`:''}
+        </div>`).join('');
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+
+// ═══════════════════════════════════════════
+//  달력
+// ═══════════════════════════════════════════
+let calDate = new Date();
+let selectedDay = null;
+
+function renderCal() {
+    const y=calDate.getFullYear(), mo=calDate.getMonth();
+    document.getElementById('cal-label').textContent=`${y}년 ${mo+1}월`;
+    const firstDow=new Date(y,mo,1).getDay(), daysInMo=new Date(y,mo+1,0).getDate(), t=today();
+    let html='';
+    for(let i=0;i<firstDow;i++){ const d=new Date(y,mo,i-firstDow+1); html+=calDayHtml(dateStr(d),d.getDate(),true,i%7===0,i%7===6,false); }
+    for(let d=1;d<=daysInMo;d++){ const ds=`${y}-${pad(mo+1)}-${pad(d)}`,dow=new Date(y,mo,d).getDay(); html+=calDayHtml(ds,d,false,dow===0,dow===6,ds===t); }
+    const total=firstDow+daysInMo, trail=total%7===0?0:7-(total%7);
+    for(let i=1;i<=trail;i++){ const d=new Date(y,mo+1,i),dow=(total+i-1)%7; html+=calDayHtml(dateStr(d),i,true,dow===0,dow===6,false); }
+    document.getElementById('cal-grid').innerHTML=html;
+}
+
+function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
+    const rs = recsFor(ds);
+    const activeMeds = meds.filter(m=>m.active);
+
+    const urine   = rs.filter(r=>r.type==='urine').length;
+    const feces   = rs.filter(r=>r.type==='feces').length;
+    const fluids  = rs.filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0);
+    const dryFood = rs.filter(r=>r.type==='dry_food').reduce((s,r)=>s+(r.amt||0),0);
+    const wetFood = rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0);
+    const memos   = rs.filter(r=>r.type==='memo');
+
+    let cls='cal-day';
+    if (other) cls+=' other-month';
+    if (isToday) cls+=' today';
+    if (isSun) cls+=' sun';
+    if (isSat) cls+=' sat';
+
+    let lines=[];
+    // 투약: 완료된 것만, 약이름 + done/total
+    activeMeds.forEach(med=>{
+        const total=med.periods.length;
+        const done=med.periods.filter(p=>isMedDone(med.id,p,ds)).length;
+        if(done>0){ const short=med.name.slice(0,4); lines.push(`${short} ${done}/${total}`); }
+    });
+    let toiletLine='';
+    if(urine>0) toiletLine+=`💛${urine}`;
+    if(feces>0) toiletLine+=(toiletLine?' ':'')+`💩${feces}`;
+    if(toiletLine) lines.push(toiletLine);
+    if(fluids>0)  lines.push(`💧${fluids}ml`);
+    if(dryFood>0) lines.push(`🍴${dryFood}g`);
+    if(wetFood>0) lines.push(`🥫${wetFood}g`);
+    memos.forEach(m=>lines.push(`⭐${m.title.slice(0,4)}`));
+
+    return `<div class="${cls}" onclick="openDayDetail('${ds}')">
+        <div class="cal-day-num">${dayNum}</div>
+        ${lines.map(l=>`<div class="cal-line">${l}</div>`).join('')}
+    </div>`;
+}
+
+function changeMonth(d) {
+    calDate.setDate(1); calDate.setMonth(calDate.getMonth()+d);
+    closeDayDetail(); renderCal();
+}
+
+// ─── 날짜 상세 (달력 하단 인라인) ───
+function openDayDetail(ds) {
+    selectedDay = ds;
+    const panel  = document.getElementById('day-detail-panel');
+    const content = document.getElementById('day-detail-content');
+
+    const rs = recsFor(ds).filter(r=>r.type!=='med'&&r.type!=='memo').sort((a,b)=>a.time.localeCompare(b.time));
+    const memoRecs = recsFor(ds).filter(r=>r.type==='memo').sort((a,b)=>a.time.localeCompare(b.time));
+    const adHocMeds = recsFor(ds).filter(r=>r.type==='med'&&r.medId===null).sort((a,b)=>a.time.localeCompare(b.time));
+    const activeMeds = meds.filter(m=>m.active);
+
+    let h = `<div class="day-detail-header">
+        <div class="day-detail-title">${fmtDate(ds)}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+            <button onclick="openAddForDate('${ds}')"
+                style="width:28px;height:28px;border-radius:50%;border:none;background:var(--primary);color:white;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;font-weight:300">+</button>
+            <button class="day-detail-close" onclick="closeDayDetail()">✕</button>
+        </div>
+    </div>`;
+
+    // ① 특이사항 (최상단)
+    if (memoRecs.length) {
+        h += `<div class="detail-section-label">⭐ 특이사항</div>`;
+        memoRecs.forEach(r=>{
+            h+=`<div class="detail-item" style="flex-direction:column;align-items:flex-start;gap:4px">
+                <div style="display:flex;width:100%;align-items:center;gap:8px">
+                    <span style="font-size:14px;font-weight:700;flex:1">⭐ ${r.title}</span>
+                    <button class="detail-time-btn" onclick="openMemoModal('${r.id}')" style="color:var(--primary-dark)">수정</button>
+                    <button class="rec-del-btn" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
+                </div>
+                ${r.body?`<div style="font-size:13px;color:var(--text-light);line-height:1.5;width:100%">${escHtml(r.body)}</div>`:''}
+            </div>`;
+        });
+    }
+
+    // ② 투약
+    if (activeMeds.length || adHocMeds.length) {
+        h += `<div class="detail-section-label">💊 투약</div>`;
+        const allDoses=[];
+        activeMeds.forEach(med=>sortedPeriods(med.periods).forEach(p=>allDoses.push({med,p})));
+        allDoses.forEach(({med,p})=>{
+            const done=isMedDone(med.id,p,ds);
+            h+=`<div class="detail-item">
+                <button class="med-check-btn ${done?'done':''}" style="width:34px;height:34px;font-size:15px;flex-shrink:0"
+                    onclick="toggleMedDate('${med.id}','${p}','${ds}')">${done?'✓':''}</button>
+                <span style="flex:1;font-size:14px">${med.name} <span style="color:var(--text-light);font-size:12px">(${PERIODS[p]||p})</span></span>
+                <span class="med-badge ${done?'done':'pending'}">${done?'완료':'미완료'}</span>
+            </div>`;
+        });
+        adHocMeds.forEach(r=>{
+            h+=`<div class="detail-item">
+                <span style="font-size:20px;width:34px;text-align:center;flex-shrink:0">💊</span>
+                <span style="flex:1;font-size:14px">${escHtml(r.medName||'투약')} <span style="color:var(--text-light);font-size:12px">(직접 입력)</span></span>
+                <span style="font-size:12px;color:var(--text-light)">${fmtTime(r.time)}</span>
+                <button class="rec-del-btn" style="margin-left:6px" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
+            </div>`;
+        });
+    }
+
+    // ③ 일반 기록
+    if (rs.length) {
+        h += `<div class="detail-section-label">📋 기록</div>`;
+        rs.forEach(r=>{
+            const t=TYPES[r.type];
+            const iconHtml=t.icon();
+            const amt=t.hasAmt?` — ${r.amt}${t.unit}`:'';
+            h+=`<div class="detail-item">
+                <span style="font-size:20px;width:26px;text-align:center;flex-shrink:0;display:flex;align-items:center">${iconHtml}</span>
+                <span style="flex:1;font-size:14px">${t.label}${amt}</span>
+                <button class="detail-time-btn" onclick="editRecordTime('${r.id}','${r.time}','${ds}')">${fmtTime(r.time)}</button>
+                <button class="rec-del-btn" style="margin-left:4px" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
+            </div>`;
+        });
+    }
+
+    if (!memoRecs.length && !activeMeds.length && !adHocMeds.length && !rs.length) {
+        h += `<div class="empty"><div class="empty-icon">📋</div>기록이 없습니다.<br><button class="add-btn" style="margin-top:12px" onclick="openAddForDate('${ds}')">+ 기록 추가하기</button></div>`;
+    }
+
+    content.innerHTML = h;
+    panel.style.display = 'block';
+    setTimeout(()=>panel.scrollIntoView({behavior:'smooth',block:'nearest'}), 50);
+}
+
+function closeDayDetail() {
+    selectedDay = null;
+    document.getElementById('day-detail-panel').style.display='none';
+    document.getElementById('day-detail-content').innerHTML='';
+}
+
+function openAddForDate(ds) {
+    const fmtDs = fmtDate(ds);
+    setModal(`${fmtDs} — 기록 추가`, `
+        <div style="display:flex;flex-direction:column;gap:10px;padding:4px 0">
+            <button class="modal-type-btn" onclick="closeModal();openMedForDate('${ds}')" style="border-color:var(--primary-light);color:var(--primary-dark)">
+                <span style="font-size:22px">💊</span> 투약
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('urine','${ds}')">
+                <span style="font-size:22px">💛</span> 소변
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('feces','${ds}')">
+                <span style="font-size:22px">💩</span> 대변
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('fluids','${ds}')">
+                <span style="font-size:22px">💧</span> 피하수액
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('dry_food','${ds}')">
+                <span style="font-size:22px">🍴</span> 건사료
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('wet_food','${ds}')">
+                <span style="font-size:22px">🥫</span> 습식사료
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openMemoModal(null,'${ds}')" style="border-color:var(--primary-light);color:var(--primary-dark)">
+                <span style="font-size:22px">⭐</span> 특이사항 메모
+            </button>
+        </div>
+        <div class="modal-btns" style="margin-top:14px">
+            <button class="btn-cancel" onclick="closeModal()">닫기</button>
+        </div>
+    `);
+    openModal();
+}
+
+function openMedForDate(ds) {
+    const fmtDs = fmtDate(ds);
+    const activeMeds = meds.filter(m => m.active);
+    let medBtns = '';
+    if (activeMeds.length) {
+        const rows = activeMeds.flatMap(med =>
+            sortedPeriods(med.periods).map(p => {
+                const done = isMedDone(med.id, p, ds);
+                return `<button class="modal-type-btn${done?' med-done-btn':''}"
+                    onclick="toggleMedDate('${med.id}','${p}','${ds}');closeModal();openDayDetail('${ds}')">
+                    <span style="font-size:20px">💊</span>
+                    <span style="flex:1;font-size:15px">${med.name} <span style="color:var(--text-light);font-size:12px">(${PERIODS[p]||p})</span></span>
+                    ${done?'<span style="color:var(--success);font-size:13px;font-weight:700">✓완료</span>':''}
+                </button>`;
+            })
+        ).join('');
+        medBtns = `<div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">등록된 약</div>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px">${rows}</div>
+            <div style="border-top:1px solid var(--border);margin:14px 0 12px"></div>`;
+    }
+    setModal(`💊 투약 — ${fmtDs}`, `
+        ${medBtns}
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">직접 입력</div>
+        <div class="form-group">
+            <label class="form-label">약 이름</label>
+            <input type="text" class="form-input" id="adhoc-name" placeholder="약 이름을 입력하세요">
+        </div>
+        <div class="form-group">
+            <label class="form-label">날짜</label>
+            <input type="date" class="form-input" id="adhoc-date" value="${ds}" max="${today()}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">시간</label>
+            <input type="time" class="form-input" id="adhoc-time" value="${nowTime()}">
+        </div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModal()">취소</button>
+            <button class="btn-confirm" onclick="saveAdHocMed()">기록하기</button>
+        </div>
+    `);
+    openModal();
+    setTimeout(() => document.getElementById('adhoc-name')?.focus(), 120);
+}
+
+function saveAdHocMed() {
+    const name = document.getElementById('adhoc-name')?.value?.trim();
+    const date = document.getElementById('adhoc-date')?.value;
+    const time = document.getElementById('adhoc-time')?.value || nowTime();
+    if (!name) { alert('약 이름을 입력하세요'); return; }
+    if (!date) { alert('날짜를 입력하세요'); return; }
+    records.push({ id:uid(), type:'med', date, time, medId:null, period:null, medName:name });
+    saveRecords(); renderCal();
+    closeModal();
+    if (selectedDay === date) openDayDetail(date);
+    if (currentView === 'home') renderHome();
+    toast(`${name} 투약 기록 완료!`);
+}
+
+function toggleMedDate(medId, period, ds) {
+    const idx=records.findIndex(r=>r.type==='med'&&r.medId===medId&&r.period===period&&r.date===ds);
+    if(idx>=0) records.splice(idx,1);
+    else { const med=meds.find(m=>m.id===medId); records.push({id:uid(),type:'med',date:ds,time:'08:00',medId,period,medName:med?.name||''}); }
+    saveRecords(); renderCal(); openDayDetail(ds);
+    if(currentView==='home') renderHome();
+}
+
+function delRecordInDetail(id, ds) {
+    records=records.filter(r=>r.id!==id);
+    saveRecords(); renderCal(); openDayDetail(ds);
+    if(currentView==='home') renderHome();
+    if(currentView==='memo') renderMemos();
+}
+
+function editRecordTime(id, currentTime, ds) {
+    const rec = records.find(r=>r.id===id);
+    setModal('시간 수정', `
+        <div class="form-group">
+            <label class="form-label">날짜</label>
+            <input type="date" class="form-input" id="et-date" value="${rec?.date||ds}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">시간</label>
+            <input type="time" class="form-input" id="et-time" value="${currentTime}">
+        </div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModal()">취소</button>
+            <button class="btn-confirm" onclick="saveEditTime('${id}','${ds}')">저장</button>
+        </div>
+    `);
+    openModal();
+}
+
+function saveEditTime(id, ds) {
+    const rec=records.find(r=>r.id===id);
+    if(rec){ rec.date=document.getElementById('et-date').value; rec.time=document.getElementById('et-time').value; }
+    saveRecords(); closeModal(); renderCal(); openDayDetail(ds);
+    if(currentView==='home') renderHome();
+}
+
+// ═══════════════════════════════════════════
+//  그래프
+// ═══════════════════════════════════════════
+let graphDays=7, charts={};
+const CHART_OPT = { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}}}, scales:{x:{ticks:{font:{size:10},maxRotation:0}},y:{beginAtZero:true,ticks:{font:{size:10}}}} };
+
+function setPeriod(days, btn) {
+    graphDays=days; document.querySelectorAll('.period-tab').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderGraphs();
+}
+function getRange(days) {
+    const arr=[]; for(let i=days-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); arr.push(dateStr(d)); } return arr;
+}
+function renderGraphs() {
+    const dates=getRange(graphDays);
+    const labels=dates.map(d=>{ const p=d.split('-'); return `${+p[1]}/${+p[2]}`; });
+    const dry=dates.map(d=>recsFor(d).filter(r=>r.type==='dry_food').reduce((s,r)=>s+(r.amt||0),0));
+    const wet=dates.map(d=>recsFor(d).filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0));
+    const total=dry.map((v,i)=>v+wet[i]);
+    makeChart('food-chart','food',labels,[
+        {label:'건사료(g)',data:dry,backgroundColor:'#C4B8E8',borderRadius:4},
+        {label:'습식사료(g)',data:wet,backgroundColor:'#9B8EC4',borderRadius:4},
+        {label:'총합(g)',data:total,type:'line',borderColor:'#5E4EA0',backgroundColor:'transparent',pointRadius:3,tension:.3,borderWidth:2},
+    ],'bar');
+    const urine=dates.map(d=>recsFor(d).filter(r=>r.type==='urine').length);
+    const feces=dates.map(d=>recsFor(d).filter(r=>r.type==='feces').length);
+    makeChart('toilet-chart','toilet',labels,[
+        {label:'소변(회)',data:urine,backgroundColor:'#FFD700',borderRadius:4},
+        {label:'대변(회)',data:feces,backgroundColor:'#A0785A',borderRadius:4},
+    ],'bar');
+    const fluids=dates.map(d=>recsFor(d).filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0));
+    makeChart('fluids-chart','fluids',labels,[{label:'피하수액(ml)',data:fluids,backgroundColor:'#80DEEA',borderRadius:4}],'bar');
+}
+function makeChart(canvasId, key, labels, datasets, type) {
+    if(charts[key]){charts[key].destroy();delete charts[key];}
+    const ctx=document.getElementById(canvasId); if(!ctx)return;
+    charts[key]=new Chart(ctx,{type,data:{labels,datasets},options:CHART_OPT});
+}
+
+// ═══════════════════════════════════════════
+//  설정
+// ═══════════════════════════════════════════
+function renderSettings() {
+    const el=document.getElementById('med-settings-list');
+    if(!meds.length){ el.innerHTML=`<div class="empty"><div class="empty-icon">💊</div>등록된 약이 없습니다.</div>`; return; }
+    el.innerHTML=meds.map(m=>`
+        <div class="med-setting-item">
+            <div class="med-setting-info">
+                <div class="med-setting-name">${m.name}</div>
+                <div class="med-setting-detail">${sortedPeriods(m.periods).map(p=>PERIODS[p]||p).join(' · ')}</div>
+            </div>
+            <button class="icon-btn edit-btn" onclick="openMedModal('${m.id}')">✏️</button>
+        </div>`).join('');
+}
+
+function openMedModal(medId) {
+    const med=medId?meds.find(m=>m.id===medId):null;
+    const sel=med?med.periods:[];
+    const chips=Object.entries(PERIODS).map(([k,v])=>
+        `<button class="p-chip ${sel.includes(k)?'on':''}" data-p="${k}" onclick="toggleChip(this)">${v}</button>`).join('');
+    setModal(med?'약 수정':'약 추가',`
+        <div class="form-group"><label class="form-label">약 이름</label>
+            <input type="text" class="form-input" id="med-name" value="${med?med.name:''}" placeholder="약 이름 입력"></div>
+        <div class="form-group"><label class="form-label">투약 시간 (복수 선택 가능)</label>
+            <div class="period-chips" id="p-chips">${chips}</div></div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModal()">취소</button>
+            ${med?`<button class="btn-del" onclick="deleteMed('${medId}')">삭제</button>`:''}
+            <button class="btn-confirm" onclick="saveMed('${medId||''}')">저장</button>
+        </div>`);
+    openModal();
+    setTimeout(()=>document.getElementById('med-name')?.focus(),120);
+}
+
+function toggleChip(btn){btn.classList.toggle('on');}
+
+function saveMed(medId) {
+    const name=document.getElementById('med-name').value.trim();
+    if(!name){alert('약 이름을 입력해 주세요.');return;}
+    const periods=[...document.querySelectorAll('#p-chips .p-chip.on')].map(b=>b.dataset.p);
+    if(!periods.length){alert('투약 시간을 선택해 주세요.');return;}
+    if(medId){const m=meds.find(m=>m.id===medId);if(m){m.name=name;m.periods=periods;}}
+    else meds.push({id:uid(),name,periods,active:true});
+    saveMeds();closeModal();renderSettings();
+    toast(`${name} ${medId?'수정':'추가'} 완료 💊`);
+}
+
+function deleteMed(medId) {
+    const med=meds.find(m=>m.id===medId);
+    if(!confirm(`"${med?.name||''}"을(를) 삭제하시겠습니까?`))return;
+    meds=meds.filter(m=>m.id!==medId);
+    saveMeds();closeModal();renderSettings();
+    if(currentView==='home')renderHome();
+}
+
+function exportData() {
+    const blob=new Blob([JSON.stringify({version:'1.0',exportedAt:new Date().toISOString(),records,meds},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=`꼬맹이_백업_${today()}.json`;a.click();URL.revokeObjectURL(url);
+    toast('백업 파일이 저장되었습니다 📥');
+}
+
+function importData() {
+    const input=document.createElement('input');input.type='file';input.accept='.json';
+    input.onchange=e=>{
+        const file=e.target.files[0];if(!file)return;
+        const reader=new FileReader();
+        reader.onload=ev=>{
+            try{
+                const data=JSON.parse(ev.target.result);
+                if(!Array.isArray(data.records)||!Array.isArray(data.meds)){alert('올바른 백업 파일이 아닙니다.');return;}
+                if(!confirm('백업 파일을 복원하면 현재 데이터가 덮어써집니다.\n계속하시겠습니까?'))return;
+                records=data.records;meds=data.meds;saveRecords();saveMeds();
+                renderSettings();if(currentView==='home')renderHome();if(currentView==='calendar')renderCal();
+                toast('복원이 완료되었습니다 📤');
+            }catch{alert('파일을 읽는 중 오류가 발생했습니다.');}
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+// ═══════════════════════════════════════════
+//  모달 헬퍼
+// ═══════════════════════════════════════════
+function setModal(title,body,noTitle){document.getElementById('modal-body').innerHTML=(noTitle?'':(`<div class="modal-title">${title}</div>`))+body;}
+function openModal(){document.getElementById('modal-overlay').classList.add('show');}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('show');}
+function overlayClick(e){if(e.target===document.getElementById('modal-overlay'))closeModal();}
+
+// ═══════════════════════════════════════════
+//  Toast
+// ═══════════════════════════════════════════
+let toastTimer=null;
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1800);}
+
+// ═══════════════════════════════════════════
+//  초기화
+// ═══════════════════════════════════════════
+function updateDate(){
+    const n=new Date(),days=['일','월','화','수','목','금','토'];
+    document.getElementById('header-date').textContent=`${n.getMonth()+1}월 ${n.getDate()}일 (${days[n.getDay()]})`;
+}
+
+load();
+updateDate();
+renderHome();
+setInterval(()=>{const n=new Date();if(n.getHours()===0&&n.getMinutes()===0){updateDate();if(currentView==='home')renderHome();}},60000);
+</script>
+</body>
+</html>
