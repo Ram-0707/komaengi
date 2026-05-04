@@ -503,22 +503,25 @@ function openRecordModal(type, defaultDate) {
     const t = TYPES[type];
     const iconHtml = t.icon();
     const dateVal = defaultDate || today();
-    const amtField = t.hasAmt ? `
-        <div class="form-group">
-            <label class="form-label">양 (${t.unit})</label>
-            <input type="number" class="form-input" id="m-amt" min="0" step="0.5" placeholder="양을 입력하세요" inputmode="decimal">
-        </div>` : '';
-    setModal('', `
-        <div class="modal-title">${iconHtml} ${t.label} 기록</div>
-        ${amtField}
-        <div class="form-group">
-            <label class="form-label">날짜</label>
-            <input type="date" class="form-input" id="m-date" value="${dateVal}" max="${today()}">
-        </div>
+    const rowFields = t.hasAmt ? `
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div style="flex:1">
+                <label class="form-label">양 (${t.unit})</label>
+                <input type="number" class="form-input" id="m-amt" min="0" step="0.5" placeholder="0" inputmode="decimal">
+            </div>
+            <div style="flex:1">
+                <label class="form-label">시간</label>
+                <input type="time" class="form-input" id="m-time" value="${nowTime()}">
+            </div>
+        </div>` : `
         <div class="form-group">
             <label class="form-label">시간</label>
             <input type="time" class="form-input" id="m-time" value="${nowTime()}">
-        </div>
+        </div>`;
+    setModal('', `
+        <div class="modal-title">${iconHtml} ${t.label} 기록</div>
+        <input type="hidden" id="m-date" value="${dateVal}">
+        ${rowFields}
         <div class="modal-btns">
             <button class="btn-cancel" onclick="closeModal()">취소</button>
             <button class="btn-confirm" onclick="saveRecord('${type}')">기록하기</button>
@@ -558,12 +561,9 @@ function openMemoModal(editId, defaultDate) {
         </div>
         <div class="form-group">
             <label class="form-label">상세 내용</label>
-            <textarea class="form-input" id="memo-body" placeholder="자세한 내용을 적어주세요...">${existing?.body||''}</textarea>
+            <textarea class="form-input" id="memo-body" placeholder="자세한 내용을 적어주세요..." style="min-height:70px">${existing?.body||''}</textarea>
         </div>
-        <div class="form-group">
-            <label class="form-label">날짜</label>
-            <input type="date" class="form-input" id="memo-date" value="${dateVal}" max="${today()}">
-        </div>
+        <input type="hidden" id="memo-date" value="${dateVal}">
         <div class="form-group">
             <label class="form-label">시간</label>
             <input type="time" class="form-input" id="memo-time" value="${existing?.time||nowTime()}">
@@ -837,18 +837,17 @@ function openMedForDate(ds) {
     setModal(`💊 투약 — ${fmtDs}`, `
         ${medBtns}
         <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">직접 입력</div>
-        <div class="form-group">
-            <label class="form-label">약 이름</label>
-            <input type="text" class="form-input" id="adhoc-name" placeholder="약 이름을 입력하세요">
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div style="flex:2">
+                <label class="form-label">약 이름</label>
+                <input type="text" class="form-input" id="adhoc-name" placeholder="약 이름">
+            </div>
+            <div style="flex:1">
+                <label class="form-label">시간</label>
+                <input type="time" class="form-input" id="adhoc-time" value="${nowTime()}">
+            </div>
         </div>
-        <div class="form-group">
-            <label class="form-label">날짜</label>
-            <input type="date" class="form-input" id="adhoc-date" value="${ds}" max="${today()}">
-        </div>
-        <div class="form-group">
-            <label class="form-label">시간</label>
-            <input type="time" class="form-input" id="adhoc-time" value="${nowTime()}">
-        </div>
+        <input type="hidden" id="adhoc-date" value="${ds}">
         <div class="modal-btns">
             <button class="btn-cancel" onclick="closeModal()">취소</button>
             <button class="btn-confirm" onclick="saveAdHocMed()">기록하기</button>
@@ -863,7 +862,6 @@ function saveAdHocMed() {
     const date = document.getElementById('adhoc-date')?.value;
     const time = document.getElementById('adhoc-time')?.value || nowTime();
     if (!name) { alert('약 이름을 입력하세요'); return; }
-    if (!date) { alert('날짜를 입력하세요'); return; }
     records.push({ id:uid(), type:'med', date, time, medId:null, period:null, medName:name });
     saveRecords(); renderCal();
     closeModal();
@@ -890,13 +888,15 @@ function delRecordInDetail(id, ds) {
 function editRecordTime(id, currentTime, ds) {
     const rec = records.find(r=>r.id===id);
     setModal('시간 수정', `
-        <div class="form-group">
-            <label class="form-label">날짜</label>
-            <input type="date" class="form-input" id="et-date" value="${rec?.date||ds}">
-        </div>
-        <div class="form-group">
-            <label class="form-label">시간</label>
-            <input type="time" class="form-input" id="et-time" value="${currentTime}">
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div style="flex:1">
+                <label class="form-label">날짜</label>
+                <input type="date" class="form-input" id="et-date" value="${rec?.date||ds}">
+            </div>
+            <div style="flex:1">
+                <label class="form-label">시간</label>
+                <input type="time" class="form-input" id="et-time" value="${currentTime}">
+            </div>
         </div>
         <div class="modal-btns">
             <button class="btn-cancel" onclick="closeModal()">취소</button>
