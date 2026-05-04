@@ -208,14 +208,24 @@
             </div>
         </div>
 
+        <div class="card" id="card-today-memo" style="display:none">
+            <div class="card-title">⭐ 특이사항</div>
+            <div id="today-memos"></div>
+        </div>
+
         <div class="card">
             <div class="card-title">오늘의 투약</div>
             <div id="med-list-home"></div>
         </div>
 
-        <div class="card">
-            <div class="card-title">오늘 기록 내역</div>
-            <div id="today-records"></div>
+        <div class="card" id="card-today-food" style="display:none">
+            <div class="card-title">🍴 식사 기록</div>
+            <div id="today-food"></div>
+        </div>
+
+        <div class="card" id="card-today-health" style="display:none">
+            <div class="card-title">💧 건강 기록</div>
+            <div id="today-health"></div>
         </div>
     </div>
 
@@ -443,36 +453,62 @@ function renderHome() {
         }).join('');
     }
 
-    // 오늘 기록 내역 (투약 제외, 최신순)
-    const list = recsFor(today()).filter(r=>r.type!=='med').sort((a,b)=>b.time.localeCompare(a.time));
-    const listEl = document.getElementById('today-records');
-    if (!list.length) {
-        listEl.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>오늘 기록이 없습니다.</div>`;
-    } else {
-        listEl.innerHTML = list.map(r => {
-            if (r.type==='memo') {
-                return `<div class="rec-item">
-                    <span class="rec-icon">⭐</span>
-                    <div class="rec-info">
-                        <div class="rec-label">${r.title||'특이사항'}</div>
-                        <div class="rec-time">${fmtTime(r.time)}</div>
-                    </div>
-                    <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
-                </div>`;
-            }
-            const t = TYPES[r.type];
-            const iconHtml = t.icon();
-            const amt = t.hasAmt ? `${r.amt}${t.unit}` : '';
+    // 오늘 기록 내역 — 시간 오름차순 (이른 시간 → 늦은 시간)
+    const asc = (a,b) => a.time.localeCompare(b.time);
+    const allRecs = recsFor(today()).filter(r=>r.type!=='med');
+
+    const recItem = r => {
+        if (r.type==='memo') {
             return `<div class="rec-item">
-                <span class="rec-icon">${iconHtml}</span>
+                <span class="rec-icon">⭐</span>
                 <div class="rec-info">
-                    <div class="rec-label">${t.label}</div>
+                    <div class="rec-label">${escHtml(r.title||'특이사항')}</div>
                     <div class="rec-time">${fmtTime(r.time)}</div>
                 </div>
-                ${amt?`<span class="rec-amount">${amt}</span>`:''}
                 <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
             </div>`;
-        }).join('');
+        }
+        const t = TYPES[r.type];
+        const amt = t.hasAmt ? `${r.amt}${t.unit}` : '';
+        return `<div class="rec-item">
+            <span class="rec-icon">${t.icon()}</span>
+            <div class="rec-info">
+                <div class="rec-label">${t.label}</div>
+                <div class="rec-time">${fmtTime(r.time)}</div>
+            </div>
+            ${amt?`<span class="rec-amount">${amt}</span>`:''}
+            <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
+        </div>`;
+    };
+
+    // ① 특이사항
+    const memoList = allRecs.filter(r=>r.type==='memo').sort(asc);
+    const memoCard = document.getElementById('card-today-memo');
+    if (memoList.length) {
+        memoCard.style.display = '';
+        document.getElementById('today-memos').innerHTML = memoList.map(recItem).join('');
+    } else {
+        memoCard.style.display = 'none';
+    }
+
+    // ② 식사 기록 (건사료, 습식사료)
+    const foodList = allRecs.filter(r=>['dry_food','wet_food'].includes(r.type)).sort(asc);
+    const foodCard = document.getElementById('card-today-food');
+    if (foodList.length) {
+        foodCard.style.display = '';
+        document.getElementById('today-food').innerHTML = foodList.map(recItem).join('');
+    } else {
+        foodCard.style.display = 'none';
+    }
+
+    // ③ 건강 기록 (피하수액, 소변, 대변)
+    const healthList = allRecs.filter(r=>['fluids','urine','feces'].includes(r.type)).sort(asc);
+    const healthCard = document.getElementById('card-today-health');
+    if (healthList.length) {
+        healthCard.style.display = '';
+        document.getElementById('today-health').innerHTML = healthList.map(recItem).join('');
+    } else {
+        healthCard.style.display = 'none';
     }
 }
 
