@@ -191,7 +191,7 @@
                     <span class="btn-label">피하수액</span>
                     <span class="btn-count" id="cnt-fluids">오늘 0 ml</span>
                 </button>
-                <button class="record-btn" onclick="openRecordModal('dry_food')">
+                <button class="record-btn" onclick="openDryFoodModal()">
                     <span class="btn-icon">🍴</span>
                     <span class="btn-label">건사료</span>
                     <span class="btn-count" id="cnt-dry">오늘 0 g</span>
@@ -387,13 +387,40 @@ function fmtDate(s) { const [y,mo,d]=s.split('-').map(Number); const days=['일'
 // ─── 기록 쿼리 ───
 function recsFor(date) { return records.filter(r=>r.date===date); }
 function isMedDone(medId,period,date) { return records.some(r=>r.type==='med'&&r.medId===medId&&r.period===period&&r.date===date); }
+
+// 건사료 실제 섭취량 계산 (기존 기록 + 새 서브타입 호환)
+function dryFoodConsumed(date) {
+    return records.filter(r=>r.date===date&&r.type==='dry_food').reduce((sum,r)=>{
+        if (!r.subtype)            return sum + (r.amt||0);          // 기존 방식
+        if (r.subtype==='finish')  return sum + (r.servingAmt||0);   // 그릇 비움
+        if (r.subtype==='leftover') return sum + Math.max(0,(r.servingAmt||0)-(r.amt||0)); // 남은량 차감
+        return sum; // 'serve', 'ate' 는 집계 제외
+    }, 0);
+}
+// 가장 최근 급여 기록의 그램수
+function lastDryFoodServing() {
+    const serves = records.filter(r=>r.type==='dry_food'&&r.subtype==='serve');
+    if (!serves.length) return 0;
+    serves.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+    return serves[serves.length-1]?.amt || 0;
+}
+// 건사료 이벤트 표시 정보 (서브타입별)
+function dryFoodEventInfo(r) {
+    if (!r.subtype) return { icon:'🍴', label:`건사료 ${r.amt}g` };
+    if (r.subtype==='serve')    return { icon:'🥣', label:`건사료 급여 ${r.amt}g` };
+    if (r.subtype==='ate')      return { icon:'😋', label:'건사료 먹었음' };
+    if (r.subtype==='finish')   return { icon:'✅', label:`건사료 완식 (${r.servingAmt||0}g)` };
+    if (r.subtype==='leftover') return { icon:'🌙', label:`건사료 남은량 ${r.amt}g → 섭취 ${Math.max(0,(r.servingAmt||0)-(r.amt||0))}g` };
+    return { icon:'🍴', label:'건사료' };
+}
+
 function todayCounts() {
     const rs=recsFor(today());
     return {
         urine:    rs.filter(r=>r.type==='urine').length,
         feces:    rs.filter(r=>r.type==='feces').length,
         fluids:   rs.filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0),
-        dry_food: rs.filter(r=>r.type==='dry_food').reduce((s,r)=>s+(r.amt||0),0),
+        dry_food: dryFoodConsumed(today()),
         wet_food: rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0),
     };
 }
@@ -468,6 +495,17 @@ function renderHome() {
                 <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
             </div>`;
         }
+        if (r.type==='dry_food' && r.subtype) {
+            const info = dryFoodEventInfo(r);
+            return `<div class="rec-item">
+                <span class="rec-icon">${info.icon}</span>
+                <div class="rec-info">
+                    <div class="rec-label">${info.label}</div>
+                    <div class="rec-time">${fmtTime(r.time)}</div>
+                </div>
+                <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
+            </div>`;
+        }
         const t = TYPES[r.type];
         const amt = t.hasAmt ? `${r.amt}${t.unit}` : '';
         return `<div class="rec-item">
@@ -535,6 +573,184 @@ function delRecord(id) {
 // ═══════════════════════════════════════════
 //  기록 모달
 // ═══════════════════════════════════════════
+//  건사료 전용 모달
+// ═══════════════════════════════════════════
+function openDryFoodModal(defaultDate) {
+    const ds = defaultDate || today();
+    const last = lastDryFoodServing();
+    const lastTxt = last ? `마지막 급여 ${last}g` : '최근 급여 없음';
+    const disabledStyle = last ? '' : 'opacity:.45;pointer-events:none';
+    setModal('', `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+            <div class="modal-title" style="margin:0">🍴 건사료 기록</div>
+            <button onclick="closeModal();openRecordModal('dry_food','${ds}')"
+                style="width:30px;height:30px;border-radius:50%;border:2px solid var(--primary);background:none;color:var(--primary);font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:300;flex-shrink:0">+</button>
+        </div>
+    `, true);
+    document.getElementById('modal-body').insertAdjacentHTML('beforeend', `
+        <div style="display:flex;flex-direction:column;gap:9px;padding:4px 0">
+            <button class="modal-type-btn" onclick="closeModal();openDryFoodServeModal('${ds}')">
+                <span style="font-size:22px">🥣</span>
+                <div style="flex:1">
+                    <div>급여 기록</div>
+                    <div style="font-size:12px;color:var(--text-light)">그릇에 넣은 양 입력</div>
+                </div>
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openDryFoodAteModal('${ds}')">
+                <span style="font-size:22px">😋</span>
+                <div style="flex:1">
+                    <div>먹었음</div>
+                    <div style="font-size:12px;color:var(--text-light)">시간만 기록 (양 없음)</div>
+                </div>
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openDryFoodFinishModal('${ds}',${last})" style="${disabledStyle}">
+                <span style="font-size:22px">✅</span>
+                <div style="flex:1">
+                    <div>그릇 비움</div>
+                    <div style="font-size:12px;color:var(--text-light)">${lastTxt} 전량 섭취</div>
+                </div>
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openDryFoodLeftoverModal('${ds}',${last})" style="${disabledStyle}">
+                <span style="font-size:22px">🌙</span>
+                <div style="flex:1">
+                    <div>남은량 입력</div>
+                    <div style="font-size:12px;color:var(--text-light)">${lastTxt}에서 차감</div>
+                </div>
+            </button>
+        </div>
+        <div class="modal-btns" style="margin-top:14px">
+            <button class="btn-cancel" onclick="closeModal()">닫기</button>
+        </div>
+    `);
+    openModal();
+}
+
+function openDryFoodServeModal(ds) {
+    setModal('🥣 건사료 급여 기록', `
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div style="flex:1">
+                <label class="form-label">급여량 (g)</label>
+                <input type="number" class="form-input" id="df-amt" min="0" step="0.5" placeholder="0" inputmode="decimal" autocomplete="off">
+            </div>
+            <div style="flex:1">
+                <label class="form-label">시간</label>
+                <input type="time" class="form-input" id="df-time" value="${nowTime()}">
+            </div>
+        </div>
+        <input type="hidden" id="df-date" value="${ds}">
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="openDryFoodModal('${ds}')">뒤로</button>
+            <button class="btn-confirm" onclick="saveDryFoodServe('${ds}')">기록하기</button>
+        </div>
+    `);
+    openModal();
+    setTimeout(()=>document.getElementById('df-amt')?.focus(), 120);
+}
+
+function openDryFoodAteModal(ds) {
+    setModal('😋 건사료 먹었음', `
+        <div class="form-group">
+            <label class="form-label">시간</label>
+            <input type="time" class="form-input" id="df-time" value="${nowTime()}">
+        </div>
+        <input type="hidden" id="df-date" value="${ds}">
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="openDryFoodModal('${ds}')">뒤로</button>
+            <button class="btn-confirm" onclick="saveDryFoodAte('${ds}')">기록하기</button>
+        </div>
+    `);
+    openModal();
+}
+
+function openDryFoodFinishModal(ds, servingAmt) {
+    setModal('✅ 그릇 비움', `
+        <div style="background:var(--bg);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:14px">
+            마지막 급여량 <strong>${servingAmt}g</strong> 전량 섭취로 기록됩니다.
+        </div>
+        <div class="form-group">
+            <label class="form-label">시간</label>
+            <input type="time" class="form-input" id="df-time" value="${nowTime()}">
+        </div>
+        <input type="hidden" id="df-date" value="${ds}">
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="openDryFoodModal('${ds}')">뒤로</button>
+            <button class="btn-confirm" onclick="saveDryFoodFinish('${ds}',${servingAmt})">기록하기</button>
+        </div>
+    `);
+    openModal();
+}
+
+function openDryFoodLeftoverModal(ds, servingAmt) {
+    setModal('🌙 남은량 입력', `
+        <div style="background:var(--bg);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:14px">
+            마지막 급여량 <strong>${servingAmt}g</strong> — 남은량을 입력하면 차감 후 섭취량으로 기록됩니다.
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div style="flex:1">
+                <label class="form-label">남은량 (g)</label>
+                <input type="number" class="form-input" id="df-amt" min="0" step="0.5" placeholder="0" inputmode="decimal" autocomplete="off">
+            </div>
+            <div style="flex:1">
+                <label class="form-label">시간</label>
+                <input type="time" class="form-input" id="df-time" value="${nowTime()}">
+            </div>
+        </div>
+        <input type="hidden" id="df-date" value="${ds}">
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="openDryFoodModal('${ds}')">뒤로</button>
+            <button class="btn-confirm" onclick="saveDryFoodLeftover('${ds}',${servingAmt})">기록하기</button>
+        </div>
+    `);
+    openModal();
+    setTimeout(()=>document.getElementById('df-amt')?.focus(), 120);
+}
+
+function saveDryFoodServe(ds) {
+    const amt = parseFloat(document.getElementById('df-amt')?.value);
+    if (isNaN(amt)||amt<=0) { alert('급여량을 입력해 주세요.'); return; }
+    const time = document.getElementById('df-time')?.value || nowTime();
+    const date = document.getElementById('df-date')?.value || ds;
+    records.push({id:uid(), type:'dry_food', subtype:'serve', amt, date, time});
+    saveRecords(); closeModal(); renderCal();
+    if (currentView==='home') renderHome();
+    if (selectedDay===date) openDayDetail(date);
+    toast(`건사료 ${amt}g 급여 기록 완료!`);
+}
+
+function saveDryFoodAte(ds) {
+    const time = document.getElementById('df-time')?.value || nowTime();
+    const date = document.getElementById('df-date')?.value || ds;
+    records.push({id:uid(), type:'dry_food', subtype:'ate', date, time});
+    saveRecords(); closeModal(); renderCal();
+    if (currentView==='home') renderHome();
+    if (selectedDay===date) openDayDetail(date);
+    toast('건사료 먹었음 기록 완료!');
+}
+
+function saveDryFoodFinish(ds, servingAmt) {
+    const time = document.getElementById('df-time')?.value || nowTime();
+    const date = document.getElementById('df-date')?.value || ds;
+    records.push({id:uid(), type:'dry_food', subtype:'finish', servingAmt, date, time});
+    saveRecords(); closeModal(); renderCal();
+    if (currentView==='home') renderHome();
+    if (selectedDay===date) openDayDetail(date);
+    toast(`건사료 ${servingAmt}g 완식 기록 완료!`);
+}
+
+function saveDryFoodLeftover(ds, servingAmt) {
+    const amt = parseFloat(document.getElementById('df-amt')?.value);
+    if (isNaN(amt)||amt<0) { alert('남은량을 입력해 주세요.'); return; }
+    const time = document.getElementById('df-time')?.value || nowTime();
+    const date = document.getElementById('df-date')?.value || ds;
+    const consumed = Math.max(0, servingAmt - amt);
+    records.push({id:uid(), type:'dry_food', subtype:'leftover', amt, servingAmt, date, time});
+    saveRecords(); closeModal(); renderCal();
+    if (currentView==='home') renderHome();
+    if (selectedDay===date) openDayDetail(date);
+    toast(`건사료 섭취량 ${consumed}g 기록 완료! (${servingAmt}g - 남은량${amt}g)`);
+}
+
+// ═══════════════════════════════════════════
 function openRecordModal(type, defaultDate) {
     const t = TYPES[type];
     const iconHtml = t.icon();
@@ -543,7 +759,7 @@ function openRecordModal(type, defaultDate) {
         <div style="display:flex;gap:10px;margin-bottom:14px">
             <div style="flex:1">
                 <label class="form-label">양 (${t.unit})</label>
-                <input type="number" class="form-input" id="m-amt" min="0" step="0.5" placeholder="0" inputmode="decimal">
+                <input type="number" class="form-input" id="m-amt" min="0" step="0.5" placeholder="0" inputmode="decimal" autocomplete="off">
             </div>
             <div style="flex:1">
                 <label class="form-label">시간</label>
@@ -592,7 +808,7 @@ function openMemoModal(editId, defaultDate) {
     setModal('⭐ 특이사항 메모', `
         <div class="form-group">
             <label class="form-label">제목 (달력에 표시됩니다 · 최대 6자)</label>
-            <input type="text" class="form-input" id="memo-title" maxlength="6"
+            <input type="text" class="form-input" id="memo-title" maxlength="6" autocomplete="off"
                 value="${existing?.title||''}" placeholder="예: 구토, 식욕저하">
         </div>
         <div class="form-group">
@@ -790,12 +1006,18 @@ function openDayDetail(ds) {
     if (rs.length) {
         h += `<div class="detail-section-label">📋 기록</div>`;
         rs.forEach(r=>{
-            const t=TYPES[r.type];
-            const iconHtml=t.icon();
-            const amt=t.hasAmt?` — ${r.amt}${t.unit}`:'';
+            let iconHtml, labelText;
+            if (r.type==='dry_food' && r.subtype) {
+                const info = dryFoodEventInfo(r);
+                iconHtml = info.icon; labelText = info.label;
+            } else {
+                const t=TYPES[r.type];
+                iconHtml = t.icon();
+                labelText = t.label + (t.hasAmt?` — ${r.amt}${t.unit}`:'');
+            }
             h+=`<div class="detail-item">
                 <span style="font-size:20px;width:26px;text-align:center;flex-shrink:0;display:flex;align-items:center">${iconHtml}</span>
-                <span style="flex:1;font-size:14px">${t.label}${amt}</span>
+                <span style="flex:1;font-size:14px">${labelText}</span>
                 <button class="detail-time-btn" onclick="editRecordTime('${r.id}','${r.time}','${ds}')">${fmtTime(r.time)}</button>
                 <button class="rec-del-btn" style="margin-left:4px" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
             </div>`;
@@ -833,7 +1055,7 @@ function openAddForDate(ds) {
             <button class="modal-type-btn" onclick="closeModal();openRecordModal('fluids','${ds}')">
                 <span style="font-size:22px">💧</span> 피하수액
             </button>
-            <button class="modal-type-btn" onclick="closeModal();openRecordModal('dry_food','${ds}')">
+            <button class="modal-type-btn" onclick="closeModal();openDryFoodModal('${ds}')">
                 <span style="font-size:22px">🍴</span> 건사료
             </button>
             <button class="modal-type-btn" onclick="closeModal();openRecordModal('wet_food','${ds}')">
@@ -876,7 +1098,7 @@ function openMedForDate(ds) {
         <div style="display:flex;gap:10px;margin-bottom:14px">
             <div style="flex:2">
                 <label class="form-label">약 이름</label>
-                <input type="text" class="form-input" id="adhoc-name" placeholder="약 이름">
+                <input type="text" class="form-input" id="adhoc-name" placeholder="약 이름" autocomplete="off">
             </div>
             <div style="flex:1">
                 <label class="form-label">시간</label>
@@ -964,7 +1186,7 @@ function getRange(days) {
 function renderGraphs() {
     const dates=getRange(graphDays);
     const labels=dates.map(d=>{ const p=d.split('-'); return `${+p[1]}/${+p[2]}`; });
-    const dry=dates.map(d=>recsFor(d).filter(r=>r.type==='dry_food').reduce((s,r)=>s+(r.amt||0),0));
+    const dry=dates.map(d=>dryFoodConsumed(d));
     const wet=dates.map(d=>recsFor(d).filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0));
     const total=dry.map((v,i)=>v+wet[i]);
     makeChart('food-chart','food',labels,[
@@ -1010,7 +1232,7 @@ function openMedModal(medId) {
         `<button class="p-chip ${sel.includes(k)?'on':''}" data-p="${k}" onclick="toggleChip(this)">${v}</button>`).join('');
     setModal(med?'약 수정':'약 추가',`
         <div class="form-group"><label class="form-label">약 이름</label>
-            <input type="text" class="form-input" id="med-name" value="${med?med.name:''}" placeholder="약 이름 입력"></div>
+            <input type="text" class="form-input" id="med-name" value="${med?med.name:''}" placeholder="약 이름 입력" autocomplete="off"></div>
         <div class="form-group"><label class="form-label">투약 시간 (복수 선택 가능)</label>
             <div class="period-chips" id="p-chips">${chips}</div></div>
         <div class="modal-btns">
