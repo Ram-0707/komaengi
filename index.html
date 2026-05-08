@@ -186,10 +186,15 @@
                     <span class="btn-label">대변</span>
                     <span class="btn-count" id="cnt-feces">오늘 0회</span>
                 </button>
-                <button class="record-btn full-width" onclick="openRecordModal('fluids')">
+                <button class="record-btn" onclick="openRecordModal('fluids')">
                     <span class="btn-icon">💧</span>
                     <span class="btn-label">피하수액</span>
                     <span class="btn-count" id="cnt-fluids">오늘 0 ml</span>
+                </button>
+                <button class="record-btn" onclick="openRecordModal('water')">
+                    <span class="btn-icon">💧</span>
+                    <span class="btn-label">물마심</span>
+                    <span class="btn-count" id="cnt-water">오늘 0회</span>
                 </button>
                 <button class="record-btn" onclick="openDryFoodModal()">
                     <span class="btn-icon">🍴</span>
@@ -202,14 +207,14 @@
                     <span class="btn-count" id="cnt-wet">오늘 0 g</span>
                 </button>
                 <button class="record-btn full-width" onclick="openMemoModal()" style="min-height:54px;border-color:var(--primary-light);">
-                    <span class="btn-icon" style="font-size:22px">⭐</span>
-                    <span class="btn-label" style="color:var(--primary)">특이사항 메모</span>
+                    <span class="btn-icon" style="font-size:22px">📝</span>
+                    <span class="btn-label" style="color:var(--primary)">메모</span>
                 </button>
             </div>
         </div>
 
         <div class="card" id="card-today-memo" style="display:none">
-            <div class="card-title">⭐ 특이사항</div>
+            <div class="card-title">📝 메모</div>
             <div id="today-memos"></div>
         </div>
 
@@ -315,7 +320,7 @@
         <span class="nav-icon">📊</span><span>그래프</span>
     </button>
     <button class="nav-item" onclick="showView('memo',this)">
-        <span class="nav-icon">⭐</span><span>특이사항</span>
+        <span class="nav-icon">📝</span><span>메모</span>
     </button>
     <button class="nav-item" onclick="showView('settings',this)">
         <span class="nav-icon">⚙️</span><span>설정</span>
@@ -343,12 +348,13 @@
 const DROP = (h=22) => { const w=Math.round(h*20/28); return `<svg width="${w}" height="${h}" viewBox="0 0 20 28" xmlns="http://www.w3.org/2000/svg"><path d="M10 1 C8 5 1 14 1 18 A9 9 0 0 0 19 18 C19 14 12 5 10 1Z" fill="#FFD700" stroke="#2D2D2D" stroke-width="1.6" stroke-linejoin="round"/><ellipse cx="7.5" cy="17" rx="2" ry="3" fill="rgba(255,255,255,0.38)" transform="rotate(-25,7.5,17)"/></svg>`; };
 
 const TYPES = {
-    urine:    { label:'소변',    icon:()=>'💛',     unit:'회',  hasAmt:false },
-    feces:    { label:'대변',    icon:()=>'💩',     unit:'회',  hasAmt:false },
-    fluids:   { label:'피하수액', icon:()=>'💧',     unit:'ml', hasAmt:true  },
-    dry_food: { label:'건사료',  icon:()=>'🍴',     unit:'g',  hasAmt:true  },
-    wet_food: { label:'습식사료', icon:()=>'🥫',     unit:'g',  hasAmt:true  },
-    memo:     { label:'특이사항', icon:()=>'⭐',     unit:'',   hasAmt:false },
+    urine:    { label:'소변',    icon:()=>'💛',  unit:'회',  hasAmt:false },
+    feces:    { label:'대변',    icon:()=>'💩',  unit:'회',  hasAmt:false },
+    fluids:   { label:'피하수액', icon:()=>'💧',  unit:'ml', hasAmt:true  },
+    water:    { label:'물마심',  icon:()=>'💧',  unit:'회',  hasAmt:false },
+    dry_food: { label:'건사료',  icon:()=>'🍴',  unit:'g',  hasAmt:true  },
+    wet_food: { label:'습식사료', icon:()=>'🥫',  unit:'g',  hasAmt:true  },
+    memo:     { label:'메모',    icon:()=>'📝',  unit:'',   hasAmt:false },
 };
 const PERIODS = { morning:'아침', noon:'점심', evening:'저녁', night:'밤', once:'1일 1회' };
 const PERIOD_ORDER = ['morning','noon','evening','night','once'];
@@ -397,12 +403,17 @@ function dryFoodConsumed(date) {
         return sum; // 'serve', 'ate' 는 집계 제외
     }, 0);
 }
-// 가장 최근 급여 기록의 그램수
-function lastDryFoodServing() {
-    const serves = records.filter(r=>r.type==='dry_food'&&r.subtype==='serve');
-    if (!serves.length) return 0;
-    serves.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-    return serves[serves.length-1]?.amt || 0;
+// 아직 소비 처리(완식/남은량)되지 않은 누적 급여량
+function pendingDryFoodServing() {
+    const events = records
+        .filter(r=>r.type==='dry_food'&&['serve','finish','leftover'].includes(r.subtype))
+        .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+    let pending = 0;
+    events.forEach(r=>{
+        if (r.subtype==='serve')                          pending += (r.amt||0);
+        else if (r.subtype==='finish'||r.subtype==='leftover') pending = 0;
+    });
+    return pending;
 }
 // 건사료 이벤트 표시 정보 (서브타입별)
 function dryFoodEventInfo(r) {
@@ -420,6 +431,7 @@ function todayCounts() {
         urine:    rs.filter(r=>r.type==='urine').length,
         feces:    rs.filter(r=>r.type==='feces').length,
         fluids:   rs.filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0),
+        water:    rs.filter(r=>r.type==='water').length,
         dry_food: dryFoodConsumed(today()),
         wet_food: rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0),
     };
@@ -454,6 +466,7 @@ function renderHome() {
     document.getElementById('cnt-urine').textContent  = `오늘 ${c.urine}회`;
     document.getElementById('cnt-feces').textContent  = `오늘 ${c.feces}회`;
     document.getElementById('cnt-fluids').textContent = `오늘 ${c.fluids} ml`;
+    document.getElementById('cnt-water').textContent  = `오늘 ${c.water}회`;
     document.getElementById('cnt-dry').textContent    = `오늘 ${c.dry_food} g`;
     document.getElementById('cnt-wet').textContent    = `오늘 ${c.wet_food} g`;
 
@@ -486,13 +499,19 @@ function renderHome() {
 
     const recItem = r => {
         if (r.type==='memo') {
-            return `<div class="rec-item">
-                <span class="rec-icon">⭐</span>
-                <div class="rec-info">
-                    <div class="rec-label">${escHtml(r.title||'특이사항')}</div>
-                    <div class="rec-time">${fmtTime(r.time)}</div>
+            const isSpecial = r.showOnCalendar !== false;
+            const icon = isSpecial ? '⭐' : '📝';
+            const titleText = r.title ? escHtml(r.title) : (isSpecial ? '특이사항' : '메모');
+            return `<div class="rec-item" style="flex-direction:column;align-items:flex-start;gap:3px">
+                <div style="display:flex;width:100%;align-items:center;gap:8px">
+                    <span class="rec-icon">${icon}</span>
+                    <div class="rec-info" style="flex:1">
+                        <div class="rec-label">${titleText}</div>
+                        <div class="rec-time">${fmtTime(r.time)}</div>
+                    </div>
+                    <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
                 </div>
-                <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
+                ${r.body?`<div style="font-size:13px;color:var(--text-light);line-height:1.5;padding:2px 0 2px 32px;white-space:pre-wrap">${escHtml(r.body)}</div>`:''}
             </div>`;
         }
         if (r.type==='dry_food' && r.subtype) {
@@ -539,8 +558,8 @@ function renderHome() {
         foodCard.style.display = 'none';
     }
 
-    // ③ 건강 기록 (피하수액, 소변, 대변)
-    const healthList = allRecs.filter(r=>['fluids','urine','feces'].includes(r.type)).sort(asc);
+    // ③ 건강 기록 (피하수액, 물마심, 소변, 대변)
+    const healthList = allRecs.filter(r=>['fluids','water','urine','feces'].includes(r.type)).sort(asc);
     const healthCard = document.getElementById('card-today-health');
     if (healthList.length) {
         healthCard.style.display = '';
@@ -577,8 +596,8 @@ function delRecord(id) {
 // ═══════════════════════════════════════════
 function openDryFoodModal(defaultDate) {
     const ds = defaultDate || today();
-    const last = lastDryFoodServing();
-    const lastTxt = last ? `마지막 급여 ${last}g` : '최근 급여 없음';
+    const last = pendingDryFoodServing();
+    const lastTxt = last ? `미처리 누적 급여 ${last}g` : '처리되지 않은 급여 없음';
     const disabledStyle = last ? '' : 'opacity:.45;pointer-events:none';
     setModal('', `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
@@ -665,7 +684,7 @@ function openDryFoodAteModal(ds) {
 function openDryFoodFinishModal(ds, servingAmt) {
     setModal('✅ 그릇 비움', `
         <div style="background:var(--bg);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:14px">
-            마지막 급여량 <strong>${servingAmt}g</strong> 전량 섭취로 기록됩니다.
+            누적 급여량 <strong>${servingAmt}g</strong> 전량 섭취로 기록됩니다.
         </div>
         <div class="form-group">
             <label class="form-label">시간</label>
@@ -683,7 +702,7 @@ function openDryFoodFinishModal(ds, servingAmt) {
 function openDryFoodLeftoverModal(ds, servingAmt) {
     setModal('🌙 남은량 입력', `
         <div style="background:var(--bg);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:14px">
-            마지막 급여량 <strong>${servingAmt}g</strong> — 남은량을 입력하면 차감 후 섭취량으로 기록됩니다.
+            누적 급여량 <strong>${servingAmt}g</strong> — 남은량을 입력하면 차감 후 섭취량으로 기록됩니다.
         </div>
         <div style="display:flex;gap:10px;margin-bottom:14px">
             <div style="flex:1">
@@ -800,22 +819,33 @@ function saveRecord(type) {
 }
 
 // ═══════════════════════════════════════════
-//  특이사항 메모
+//  메모 (일반 메모 + 특이사항 토글)
 // ═══════════════════════════════════════════
 function openMemoModal(editId, defaultDate) {
     const existing = editId ? records.find(r=>r.id===editId) : null;
     const dateVal = existing?.date || defaultDate || today();
-    setModal('⭐ 특이사항 메모', `
+    // 기존 레코드: showOnCalendar 없으면 true (하위호환)
+    const isSpecial = existing ? (existing.showOnCalendar !== false) : false;
+    setModal('📝 메모', `
         <div class="form-group">
-            <label class="form-label">제목 (달력에 표시됩니다 · 최대 6자)</label>
-            <input type="text" class="form-input" id="memo-title" maxlength="6" autocomplete="off"
-                value="${existing?.title||''}" placeholder="예: 구토, 식욕저하">
+            <label class="form-label">내용</label>
+            <textarea class="form-input" id="memo-body" placeholder="내용을 입력하세요..." style="min-height:80px">${existing?.body||''}</textarea>
         </div>
-        <div class="form-group">
-            <label class="form-label">상세 내용</label>
-            <textarea class="form-input" id="memo-body" placeholder="자세한 내용을 적어주세요..." style="min-height:70px">${existing?.body||''}</textarea>
+        <div style="margin-bottom:14px">
+            <button id="memo-special-btn" onclick="toggleMemoSpecial()"
+                style="width:100%;padding:11px;border-radius:12px;border:2px solid ${isSpecial?'var(--warning)':'var(--border)'};background:${isSpecial?'#FFF8EE':'var(--bg)'};font-size:14px;font-weight:600;color:${isSpecial?'var(--warning)':'var(--text-light)'};cursor:pointer;transition:all .15s">
+                ${isSpecial?'⭐ 특이사항 (달력에 표시됨)':'☆ 일반 메모 — 특이사항으로 등록하려면 탭하세요'}
+            </button>
+        </div>
+        <div id="memo-title-wrap" style="display:${isSpecial?'block':'none'}">
+            <div class="form-group">
+                <label class="form-label">달력 표시 제목 (최대 6자)</label>
+                <input type="text" class="form-input" id="memo-title" maxlength="6" autocomplete="off"
+                    value="${existing?.title||''}" placeholder="예: 구토, 식욕저하">
+            </div>
         </div>
         <input type="hidden" id="memo-date" value="${dateVal}">
+        <input type="hidden" id="memo-special" value="${isSpecial?'1':'0'}">
         <div class="form-group">
             <label class="form-label">시간</label>
             <input type="time" class="form-input" id="memo-time" value="${existing?.time||nowTime()}">
@@ -827,23 +857,38 @@ function openMemoModal(editId, defaultDate) {
         </div>
     `);
     openModal();
-    setTimeout(()=>document.getElementById('memo-title')?.focus(), 120);
+    setTimeout(()=>document.getElementById('memo-body')?.focus(), 120);
+}
+
+function toggleMemoSpecial() {
+    const hidden = document.getElementById('memo-special');
+    const btn = document.getElementById('memo-special-btn');
+    const wrap = document.getElementById('memo-title-wrap');
+    const on = hidden.value === '0';
+    hidden.value = on ? '1' : '0';
+    btn.style.borderColor = on ? 'var(--warning)' : 'var(--border)';
+    btn.style.background  = on ? '#FFF8EE' : 'var(--bg)';
+    btn.style.color       = on ? 'var(--warning)' : 'var(--text-light)';
+    btn.textContent       = on ? '⭐ 특이사항 (달력에 표시됨)' : '☆ 일반 메모 — 특이사항으로 등록하려면 탭하세요';
+    wrap.style.display    = on ? 'block' : 'none';
 }
 
 function saveMemo(editId) {
-    const title = document.getElementById('memo-title').value.trim();
-    if (!title) { alert('제목을 입력해 주세요.'); return; }
     const body  = document.getElementById('memo-body').value.trim();
+    if (!body) { alert('내용을 입력해 주세요.'); return; }
+    const showOnCalendar = document.getElementById('memo-special').value === '1';
+    const title = showOnCalendar ? document.getElementById('memo-title').value.trim() : '';
+    if (showOnCalendar && !title) { alert('달력에 표시할 제목을 입력해 주세요.'); return; }
     const date  = document.getElementById('memo-date').value;
     const time  = document.getElementById('memo-time').value;
     if (editId) {
         const r = records.find(r=>r.id===editId);
-        if (r) Object.assign(r, {title,body,date,time});
+        if (r) Object.assign(r, {title,body,date,time,showOnCalendar});
     } else {
-        records.push({id:uid(),type:'memo',date,time,title,body});
+        records.push({id:uid(),type:'memo',date,time,title,body,showOnCalendar});
     }
     saveRecords(); closeModal();
-    toast('특이사항이 기록되었습니다 ⭐');
+    toast(showOnCalendar ? '특이사항이 기록되었습니다 ⭐' : '메모가 기록되었습니다 📝');
     if (currentView==='home') renderHome();
     if (currentView==='calendar') { renderCal(); if(selectedDay) openDayDetail(selectedDay); }
     if (currentView==='memo') renderMemos();
@@ -863,20 +908,27 @@ function renderMemos() {
         .sort((a,b)=>b.date.localeCompare(a.date)||b.time.localeCompare(a.time));
     const wrap = document.getElementById('memo-list-wrap');
     if (!memoRecs.length) {
-        wrap.innerHTML = `<div class="card"><div class="empty"><div class="empty-icon">⭐</div>기록된 특이사항이 없습니다.<br>홈 화면에서 추가할 수 있습니다.</div></div>`;
+        wrap.innerHTML = `<div class="card"><div class="empty"><div class="empty-icon">📝</div>기록된 메모가 없습니다.<br>홈 화면에서 추가할 수 있습니다.</div></div>`;
         return;
     }
-    wrap.innerHTML = memoRecs.map(r=>`
-        <div class="memo-card">
+    wrap.innerHTML = memoRecs.map(r=>{
+        const isSpecial = r.showOnCalendar !== false;
+        const icon = isSpecial ? '⭐' : '📝';
+        const titleText = r.title || (isSpecial ? '특이사항' : '메모');
+        const badge = isSpecial
+            ? `<span style="font-size:11px;background:#FFF3CD;color:#B8860B;border-radius:8px;padding:2px 7px;font-weight:600;vertical-align:middle">달력</span>`
+            : '';
+        return `<div class="memo-card">
             <div class="memo-card-header">
-                <div>
-                    <div class="memo-card-title">⭐ ${r.title}</div>
+                <div style="flex:1">
+                    <div class="memo-card-title">${icon} ${escHtml(titleText)} ${badge}</div>
                     <div class="memo-card-date">${fmtDate(r.date)} ${fmtTime(r.time)}</div>
                 </div>
                 <button class="icon-btn edit-btn" onclick="openMemoModal('${r.id}')">✏️</button>
             </div>
             ${r.body?`<div class="memo-card-body">${escHtml(r.body)}</div>`:''}
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
@@ -906,9 +958,10 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
     const urine   = rs.filter(r=>r.type==='urine').length;
     const feces   = rs.filter(r=>r.type==='feces').length;
     const fluids  = rs.filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0);
-    const dryFood = rs.filter(r=>r.type==='dry_food').reduce((s,r)=>s+(r.amt||0),0);
+    const water   = rs.filter(r=>r.type==='water').length;
+    const dryFood = dryFoodConsumed(ds);
     const wetFood = rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0);
-    const memos   = rs.filter(r=>r.type==='memo');
+    const memos   = rs.filter(r=>r.type==='memo'&&r.showOnCalendar!==false);
 
     let cls='cal-day';
     if (other) cls+=' other-month';
@@ -928,6 +981,7 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
     if(feces>0) toiletLine+=(toiletLine?' ':'')+`💩${feces}`;
     if(toiletLine) lines.push(toiletLine);
     if(fluids>0)  lines.push(`💧${fluids}ml`);
+    if(water>0)   lines.push(`💧물${water}회`);
     if(dryFood>0) lines.push(`🍴${dryFood}g`);
     if(wetFood>0) lines.push(`🥫${wetFood}g`);
     memos.forEach(m=>lines.push(`⭐${m.title.slice(0,4)}`));
@@ -963,13 +1017,16 @@ function openDayDetail(ds) {
         </div>
     </div>`;
 
-    // ① 특이사항 (최상단)
+    // ① 메모 (최상단)
     if (memoRecs.length) {
-        h += `<div class="detail-section-label">⭐ 특이사항</div>`;
+        h += `<div class="detail-section-label">📝 메모</div>`;
         memoRecs.forEach(r=>{
+            const isSpecial = r.showOnCalendar !== false;
+            const icon = isSpecial ? '⭐' : '📝';
+            const titleText = r.title || (isSpecial ? '특이사항' : '메모');
             h+=`<div class="detail-item" style="flex-direction:column;align-items:flex-start;gap:4px">
                 <div style="display:flex;width:100%;align-items:center;gap:8px">
-                    <span style="font-size:14px;font-weight:700;flex:1">⭐ ${r.title}</span>
+                    <span style="font-size:14px;font-weight:700;flex:1">${icon} ${escHtml(titleText)}</span>
                     <button class="detail-time-btn" onclick="openMemoModal('${r.id}')" style="color:var(--primary-dark)">수정</button>
                     <button class="rec-del-btn" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
                 </div>
@@ -1055,6 +1112,9 @@ function openAddForDate(ds) {
             <button class="modal-type-btn" onclick="closeModal();openRecordModal('fluids','${ds}')">
                 <span style="font-size:22px">💧</span> 피하수액
             </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('water','${ds}')">
+                <span style="font-size:22px">💧</span> 물마심
+            </button>
             <button class="modal-type-btn" onclick="closeModal();openDryFoodModal('${ds}')">
                 <span style="font-size:22px">🍴</span> 건사료
             </button>
@@ -1062,7 +1122,7 @@ function openAddForDate(ds) {
                 <span style="font-size:22px">🥫</span> 습식사료
             </button>
             <button class="modal-type-btn" onclick="closeModal();openMemoModal(null,'${ds}')" style="border-color:var(--primary-light);color:var(--primary-dark)">
-                <span style="font-size:22px">⭐</span> 특이사항 메모
+                <span style="font-size:22px">📝</span> 메모
             </button>
         </div>
         <div class="modal-btns" style="margin-top:14px">
