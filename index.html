@@ -96,8 +96,10 @@
         .cal-day.today .cal-day-num { background:var(--primary); color:white; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; }
         .cal-line { font-size:9px; line-height:1.6; width:100%; text-align:center; white-space:nowrap; color:var(--text); overflow:hidden; text-overflow:ellipsis; }
 
-        /* ─── Calendar Legend ─── */
-        .cal-legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; color:var(--text-light); }
+        /* ─── Calendar Filter ─── */
+        .cal-filter-row { display:flex; flex-wrap:wrap; gap:5px; }
+        .cal-filter-btn { padding:4px 10px; border-radius:20px; border:1.5px solid var(--border); background:none; font-size:12px; color:var(--text-light); cursor:pointer; transition:.15s; }
+        .cal-filter-btn.active { background:var(--primary); border-color:var(--primary); color:white; font-weight:600; }
 
         /* ─── Day Detail Panel ─── */
         .day-detail-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
@@ -250,10 +252,16 @@
             </div>
             <div class="cal-grid" id="cal-grid"></div>
         </div>
-        <div class="card" style="padding:12px 16px;">
-            <div class="cal-legend">
-                <span>💊 투약완료</span><span>💛 소변</span><span>💩 대변</span>
-                <span>💧 피하수액</span><span>🍴 건사료</span><span>🥫 습식사료</span><span>⭐ 특이사항</span>
+        <div class="card" style="padding:10px 12px;">
+            <div class="cal-filter-row">
+                <button class="cal-filter-btn active" data-filter="all" onclick="setCalFilter('all')">전체</button>
+                <button class="cal-filter-btn" data-filter="med" onclick="setCalFilter('med')">💊 투약</button>
+                <button class="cal-filter-btn" data-filter="toilet" onclick="setCalFilter('toilet')">💛💩 대소변</button>
+                <button class="cal-filter-btn" data-filter="fluids" onclick="setCalFilter('fluids')">💧 피하수액</button>
+                <button class="cal-filter-btn" data-filter="water" onclick="setCalFilter('water')">💧 물마심</button>
+                <button class="cal-filter-btn" data-filter="dry_food" onclick="setCalFilter('dry_food')">🍴 건사료</button>
+                <button class="cal-filter-btn" data-filter="wet_food" onclick="setCalFilter('wet_food')">🥫 습식사료</button>
+                <button class="cal-filter-btn" data-filter="memo" onclick="setCalFilter('memo')">⭐ 특이사항</button>
             </div>
         </div>
         <!-- 날짜별 상세 패널 (달력 하단) -->
@@ -398,6 +406,7 @@ function isMedDone(medId,period,date) { return records.some(r=>r.type==='med'&&r
 function dryFoodConsumed(date) {
     return records.filter(r=>r.date===date&&r.type==='dry_food').reduce((sum,r)=>{
         if (!r.subtype)            return sum + (r.amt||0);          // 기존 방식
+        if (r.subtype==='ate')     return sum + (r.amt||0);          // 먹은 양 입력 (양 없으면 0)
         if (r.subtype==='finish')  return sum + (r.servingAmt||0);   // 그릇 비움
         if (r.subtype==='leftover') return sum + Math.max(0,(r.servingAmt||0)-(r.amt||0)); // 남은량 차감
         return sum; // 'serve', 'ate' 는 집계 제외
@@ -407,13 +416,13 @@ function dryFoodConsumed(date) {
 // upToDate: 이 날짜까지의 이벤트만 계산 (달력에서 특정 날짜 기준으로 볼 때 사용)
 function pendingDryFoodServing(upToDate) {
     const events = records
-        .filter(r=>r.type==='dry_food'&&['serve','finish','leftover'].includes(r.subtype))
+        .filter(r=>r.type==='dry_food'&&['serve','finish','leftover','discard'].includes(r.subtype))
         .filter(r=>!upToDate || r.date <= upToDate)
         .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
     let pending = 0;
     events.forEach(r=>{
-        if (r.subtype==='serve')                               pending += (r.amt||0);
-        else if (r.subtype==='finish'||r.subtype==='leftover') pending = 0;
+        if (r.subtype==='serve')                                          pending += (r.amt||0);
+        else if (r.subtype==='finish'||r.subtype==='leftover'||r.subtype==='discard') pending = 0;
     });
     return pending;
 }
@@ -421,9 +430,10 @@ function pendingDryFoodServing(upToDate) {
 function dryFoodEventInfo(r) {
     if (!r.subtype) return { icon:'🍴', label:`건사료 ${r.amt}g` };
     if (r.subtype==='serve')    return { icon:'🥣', label:`건사료 급여 ${r.amt}g` };
-    if (r.subtype==='ate')      return { icon:'😋', label:'건사료 먹었음' };
+    if (r.subtype==='ate')      return r.amt ? { icon:'😋', label:`건사료 섭취 ${r.amt}g` } : { icon:'😋', label:'건사료 먹었음' };
     if (r.subtype==='finish')   return { icon:'✅', label:`건사료 완식 (${r.servingAmt||0}g)` };
     if (r.subtype==='leftover') return { icon:'🌙', label:`건사료 남은량 ${r.amt}g → 섭취 ${Math.max(0,(r.servingAmt||0)-(r.amt||0))}g` };
+    if (r.subtype==='discard')  return { icon:'🗑️', label:`건사료 잔반 비움 (${r.servingAmt||0}g 폐기)` };
     return { icon:'🍴', label:'건사료' };
 }
 
@@ -609,34 +619,28 @@ function openDryFoodModal(defaultDate) {
         </div>
     `, true);
     document.getElementById('modal-body').insertAdjacentHTML('beforeend', `
-        <div style="display:flex;flex-direction:column;gap:9px;padding:4px 0">
-            <button class="modal-type-btn" onclick="closeModal();openDryFoodServeModal('${ds}')">
-                <span style="font-size:22px">🥣</span>
-                <div style="flex:1">
-                    <div>급여 기록</div>
-                    <div style="font-size:12px;color:var(--text-light)">그릇에 넣은 양 입력</div>
-                </div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);letter-spacing:.6px;margin-bottom:7px">급여</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px">
+            <button onclick="closeModal();openDryFoodServeModal('${ds}')" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:12px;border:1.5px solid var(--border);background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                <span style="font-size:22px">🥣</span>급여
             </button>
-            <button class="modal-type-btn" onclick="closeModal();openDryFoodAteModal('${ds}')">
-                <span style="font-size:22px">😋</span>
-                <div style="flex:1">
-                    <div>먹었음</div>
-                    <div style="font-size:12px;color:var(--text-light)">시간만 기록 (양 없음)</div>
-                </div>
+            <button onclick="closeModal();openDryFoodAteAmtModal('${ds}')" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:12px;border:1.5px solid var(--border);background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                <span style="font-size:22px">😋</span>먹음
             </button>
-            <button class="modal-type-btn" onclick="closeModal();openDryFoodFinishModal('${ds}',${last})" style="${disabledStyle}">
-                <span style="font-size:22px">✅</span>
-                <div style="flex:1">
-                    <div>그릇 비움</div>
-                    <div style="font-size:12px;color:var(--text-light)">${lastTxt} 전량 섭취</div>
-                </div>
+            <button onclick="closeModal();openDryFoodAteModal('${ds}')" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:12px;border:1.5px solid var(--border);background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                <span style="font-size:22px">⏰</span>시간만
             </button>
-            <button class="modal-type-btn" onclick="closeModal();openDryFoodLeftoverModal('${ds}',${last})" style="${disabledStyle}">
-                <span style="font-size:22px">🌙</span>
-                <div style="flex:1">
-                    <div>남은량 입력</div>
-                    <div style="font-size:12px;color:var(--text-light)">${lastTxt}에서 차감</div>
-                </div>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);letter-spacing:.6px;margin-bottom:7px">비움</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+            <button onclick="closeModal();openDryFoodFinishModal('${ds}',${last})" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:12px;border:1.5px solid var(--border);background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);${disabledStyle}">
+                <span style="font-size:22px">✅</span>전량 섭취
+            </button>
+            <button onclick="closeModal();openDryFoodLeftoverModal('${ds}',${last})" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:12px;border:1.5px solid var(--border);background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);${disabledStyle}">
+                <span style="font-size:22px">🌙</span>잔량 이월
+            </button>
+            <button onclick="closeModal();openDryFoodDiscardModal('${ds}',${last})" style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:12px;border:1.5px solid var(--border);background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);${disabledStyle}">
+                <span style="font-size:22px">🗑️</span>잔반 비움
             </button>
         </div>
         <div class="modal-btns" style="margin-top:14px">
@@ -668,8 +672,30 @@ function openDryFoodServeModal(ds) {
     setTimeout(()=>document.getElementById('df-amt')?.focus(), 120);
 }
 
+function openDryFoodAteAmtModal(ds) {
+    setModal('😋 먹은 양 입력', `
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div style="flex:1">
+                <label class="form-label">섭취량 (g)</label>
+                <input type="number" class="form-input" id="df-amt" min="0" step="0.5" placeholder="0" inputmode="decimal" autocomplete="off">
+            </div>
+            <div style="flex:1">
+                <label class="form-label">시간</label>
+                <input type="time" class="form-input" id="df-time" value="${nowTime()}">
+            </div>
+        </div>
+        <input type="hidden" id="df-date" value="${ds}">
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="openDryFoodModal('${ds}')">뒤로</button>
+            <button class="btn-confirm" onclick="saveDryFoodAteAmt('${ds}')">기록하기</button>
+        </div>
+    `);
+    openModal();
+    setTimeout(()=>document.getElementById('df-amt')?.focus(), 120);
+}
+
 function openDryFoodAteModal(ds) {
-    setModal('😋 건사료 먹었음', `
+    setModal('⏰ 먹은 시간만 기록', `
         <div class="form-group">
             <label class="form-label">시간</label>
             <input type="time" class="form-input" id="df-time" value="${nowTime()}">
@@ -737,6 +763,18 @@ function saveDryFoodServe(ds) {
     toast(`건사료 ${amt}g 급여 기록 완료!`);
 }
 
+function saveDryFoodAteAmt(ds) {
+    const amt = parseFloat(document.getElementById('df-amt')?.value);
+    if (isNaN(amt)||amt<=0) { alert('섭취량을 입력해 주세요.'); return; }
+    const time = document.getElementById('df-time')?.value || nowTime();
+    const date = document.getElementById('df-date')?.value || ds;
+    records.push({id:uid(), type:'dry_food', subtype:'ate', amt, date, time});
+    saveRecords(); closeModal(); renderCal();
+    if (currentView==='home') renderHome();
+    if (selectedDay===date) openDayDetail(date);
+    toast(`건사료 섭취 ${amt}g 기록 완료!`);
+}
+
 function saveDryFoodAte(ds) {
     const time = document.getElementById('df-time')?.value || nowTime();
     const date = document.getElementById('df-date')?.value || ds;
@@ -776,6 +814,38 @@ function saveDryFoodLeftover(ds, servingAmt) {
         ? `섭취 ${consumed}g 기록, 남은 ${amt}g은 다음날로 이월됐어요 🌙`
         : `건사료 섭취량 ${consumed}g 기록 완료!`;
     toast(msg);
+}
+
+function openDryFoodDiscardModal(ds, servingAmt) {
+    setModal('🗑️ 잔반 비움', `
+        <div style="background:var(--bg);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:14px;line-height:1.7">
+            누적 급여량 <strong>${servingAmt}g</strong><br>
+            <span style="color:var(--text-light);font-size:13px">
+                · 남은 사료를 버리고 다음날로 이월하지 않습니다.<br>
+                · 섭취량은 별도로 기록되지 않습니다.
+            </span>
+        </div>
+        <div class="form-group">
+            <label class="form-label">시간</label>
+            <input type="time" class="form-input" id="df-time" value="${nowTime()}">
+        </div>
+        <input type="hidden" id="df-date" value="${ds}">
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="openDryFoodModal('${ds}')">뒤로</button>
+            <button class="btn-confirm" onclick="saveDryFoodDiscard('${ds}',${servingAmt})">기록하기</button>
+        </div>
+    `);
+    openModal();
+}
+
+function saveDryFoodDiscard(ds, servingAmt) {
+    const time = document.getElementById('df-time')?.value || nowTime();
+    const date = document.getElementById('df-date')?.value || ds;
+    records.push({id:uid(), type:'dry_food', subtype:'discard', servingAmt, date, time});
+    saveRecords(); closeModal(); renderCal();
+    if (currentView==='home') renderHome();
+    if (selectedDay===date) openDayDetail(date);
+    toast(`잔반 비움 기록 완료 (${servingAmt}g 폐기)`);
 }
 
 // ═══════════════════════════════════════════
@@ -947,6 +1017,7 @@ function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 // ═══════════════════════════════════════════
 let calDate = new Date();
 let selectedDay = null;
+let calFilter = 'all';
 
 function renderCal() {
     const y=calDate.getFullYear(), mo=calDate.getMonth();
@@ -979,26 +1050,39 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
     if (isSat) cls+=' sat';
 
     let lines=[];
-    // 투약: 완료된 것만, 약이름 + done/total
-    activeMeds.forEach(med=>{
-        const total=med.periods.length;
-        const done=med.periods.filter(p=>isMedDone(med.id,p,ds)).length;
-        if(done>0){ const short=med.name.slice(0,4); lines.push(`${short} ${done}/${total}`); }
-    });
+    const cf = calFilter;
+    const all = cf === 'all';
+    // 투약
+    if (all || cf==='med') {
+        meds.forEach(med=>{
+            const total=med.periods.length;
+            const done=med.periods.filter(p=>isMedDone(med.id,p,ds)).length;
+            if(done>0){ const short=med.name.slice(0,4); lines.push(`${short} ${done}/${total}`); }
+        });
+    }
+    // 소변/대변
     let toiletLine='';
-    if(urine>0) toiletLine+=`💛${urine}`;
-    if(feces>0) toiletLine+=(toiletLine?' ':'')+`💩${feces}`;
+    if((all||cf==='toilet')&&urine>0) toiletLine+=`💛${urine}`;
+    if((all||cf==='toilet')&&feces>0) toiletLine+=(toiletLine?' ':'')+`💩${feces}`;
     if(toiletLine) lines.push(toiletLine);
-    if(fluids>0)  lines.push(`💧${fluids}ml`);
-    if(water>0)   lines.push(`💧물${water}회`);
-    if(dryFood>0) lines.push(`🍴${dryFood}g`);
-    if(wetFood>0) lines.push(`🥫${wetFood}g`);
-    memos.forEach(m=>lines.push(`⭐${m.title.slice(0,4)}`));
+    if((all||cf==='fluids')&&fluids>0)  lines.push(`💧${fluids}ml`);
+    if((all||cf==='water')&&water>0)    lines.push(`💧물${water}회`);
+    if((all||cf==='dry_food')&&dryFood>0) lines.push(`🍴${dryFood}g`);
+    if((all||cf==='wet_food')&&wetFood>0) lines.push(`🥫${wetFood}g`);
+    if(all||cf==='memo') memos.forEach(m=>lines.push(`⭐${m.title.slice(0,4)}`));
 
     return `<div class="${cls}" onclick="openDayDetail('${ds}')">
         <div class="cal-day-num">${dayNum}</div>
         ${lines.map(l=>`<div class="cal-line">${l}</div>`).join('')}
     </div>`;
+}
+
+function setCalFilter(f) {
+    calFilter = f;
+    document.querySelectorAll('.cal-filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.filter === f);
+    });
+    renderCal();
 }
 
 function changeMonth(d) {
@@ -1045,7 +1129,8 @@ function openDayDetail(ds) {
     }
 
     // ② 투약
-    if (activeMeds.length || adHocMeds.length) {
+    const inactiveMedsWithRec = meds.filter(m=>!m.active&&m.periods.some(p=>isMedDone(m.id,p,ds)));
+    if (activeMeds.length || adHocMeds.length || inactiveMedsWithRec.length) {
         h += `<div class="detail-section-label">💊 투약</div>`;
         const allDoses=[];
         activeMeds.forEach(med=>sortedPeriods(med.periods).forEach(p=>allDoses.push({med,p})));
@@ -1066,6 +1151,14 @@ function openDayDetail(ds) {
                 <button class="rec-del-btn" style="margin-left:6px" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
             </div>`;
         });
+        inactiveMedsWithRec.forEach(med=>sortedPeriods(med.periods).forEach(p=>{
+            if(!isMedDone(med.id,p,ds)) return;
+            h+=`<div class="detail-item" style="opacity:.6">
+                <span class="med-check-btn done" style="width:34px;height:34px;font-size:15px;flex-shrink:0;pointer-events:none">✓</span>
+                <span style="flex:1;font-size:14px">${med.name} <span style="color:var(--text-light);font-size:12px">(${PERIODS[p]||p} · 중단됨)</span></span>
+                <span class="med-badge done">완료</span>
+            </div>`;
+        }));
     }
 
     // ③ 일반 기록
@@ -1283,8 +1376,10 @@ function makeChart(canvasId, key, labels, datasets, type) {
 // ═══════════════════════════════════════════
 function renderSettings() {
     const el=document.getElementById('med-settings-list');
-    if(!meds.length){ el.innerHTML=`<div class="empty"><div class="empty-icon">💊</div>등록된 약이 없습니다.</div>`; return; }
-    el.innerHTML=meds.map(m=>`
+    const activeMeds=meds.filter(m=>m.active), inactiveMeds=meds.filter(m=>!m.active&&!m.permanentlyDeleted);
+    const visibleMeds=meds.filter(m=>!m.permanentlyDeleted);
+    if(!visibleMeds.length){ el.innerHTML=`<div class="empty"><div class="empty-icon">💊</div>등록된 약이 없습니다.</div>`; return; }
+    let html=activeMeds.map(m=>`
         <div class="med-setting-item">
             <div class="med-setting-info">
                 <div class="med-setting-name">${m.name}</div>
@@ -1292,6 +1387,19 @@ function renderSettings() {
             </div>
             <button class="icon-btn edit-btn" onclick="openMedModal('${m.id}')">✏️</button>
         </div>`).join('');
+    if(inactiveMeds.length){
+        html+=`<div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.7px;margin:14px 0 8px">중단된 약</div>`;
+        html+=inactiveMeds.map(m=>`
+            <div class="med-setting-item" style="opacity:.65">
+                <div class="med-setting-info">
+                    <div class="med-setting-name" style="color:var(--text-light)">${m.name} <span style="font-size:11px">(중단)</span></div>
+                    <div class="med-setting-detail">${sortedPeriods(m.periods).map(p=>PERIODS[p]||p).join(' · ')}</div>
+                </div>
+                <button class="icon-btn" onclick="reactivateMed('${m.id}')" style="font-size:13px;color:var(--success);border:1.5px solid var(--success);border-radius:8px;padding:3px 7px;background:none;cursor:pointer">재활성</button>
+                <button class="icon-btn" onclick="permanentDeleteMed('${m.id}')" style="font-size:13px;color:var(--danger);border:1.5px solid var(--danger);border-radius:8px;padding:3px 7px;background:none;cursor:pointer;margin-left:4px">완전삭제</button>
+            </div>`).join('');
+    }
+    el.innerHTML=html;
 }
 
 function openMedModal(medId) {
@@ -1328,10 +1436,28 @@ function saveMed(medId) {
 
 function deleteMed(medId) {
     const med=meds.find(m=>m.id===medId);
-    if(!confirm(`"${med?.name||''}"을(를) 삭제하시겠습니까?`))return;
-    meds=meds.filter(m=>m.id!==medId);
+    if(!confirm(`"${med?.name||''}"을(를) 투약 목록에서 제외하시겠습니까?\n(과거 기록은 유지됩니다)`))return;
+    if(med) med.active=false;
     saveMeds();closeModal();renderSettings();
     if(currentView==='home')renderHome();
+    toast(`${med?.name||''} 투약 중단 처리됐습니다.`);
+}
+
+function reactivateMed(medId) {
+    const med=meds.find(m=>m.id===medId);
+    if(med) med.active=true;
+    saveMeds();renderSettings();
+    if(currentView==='home')renderHome();
+    toast(`${med?.name||''} 재활성화됐습니다 💊`);
+}
+
+function permanentDeleteMed(medId) {
+    const med=meds.find(m=>m.id===medId);
+    if(!confirm(`"${med?.name||''}"을(를) 목록에서 완전히 제거하시겠습니까?\n(달력의 과거 기록은 유지됩니다)`))return;
+    if(med){ med.active=false; med.permanentlyDeleted=true; }
+    saveMeds();renderSettings();
+    if(currentView==='home')renderHome();
+    toast(`${med?.name||''} 삭제됐습니다.`);
 }
 
 function exportData() {
