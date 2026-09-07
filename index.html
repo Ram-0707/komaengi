@@ -230,7 +230,12 @@
                     <span class="btn-label" style="color:var(--primary)">메모</span>
                     <span class="btn-count">일반·특이사항</span>
                 </button>
-                <button class="record-btn" onclick="openRecordModal('weight')" style="grid-column:span 3;flex-direction:row;min-height:44px;gap:8px;padding:8px">
+                <button class="record-btn" onclick="openRecordModal('play')">
+                    <span class="btn-icon">🧶</span>
+                    <span class="btn-label">놀았음</span>
+                    <span class="btn-count" id="cnt-play">오늘 0회</span>
+                </button>
+                <button class="record-btn" onclick="openRecordModal('weight')" style="grid-column:span 2;flex-direction:row;min-height:44px;gap:8px;padding:8px">
                     <span class="btn-icon" style="font-size:18px">⚖️</span>
                     <span class="btn-label">몸무게</span>
                     <span class="btn-count" id="cnt-weight"></span>
@@ -279,6 +284,7 @@
                 <button class="cal-filter-btn active" data-filter="fluids" onclick="setCalFilter('fluids')">💧 피하수액</button>
                 <button class="cal-filter-btn active" data-filter="water" onclick="setCalFilter('water')">💦 물마심</button>
                 <button class="cal-filter-btn active" data-filter="food" onclick="setCalFilter('food')">🍴🥫 사료</button>
+                <button class="cal-filter-btn active" data-filter="play" onclick="setCalFilter('play')">🧶 놀았음</button>
                 <button class="cal-filter-btn active" data-filter="memo" onclick="setCalFilter('memo')">⭐ 특이사항</button>
             </div>
         </div>
@@ -311,7 +317,7 @@
             <div class="chart-wrap"><canvas id="fluids-chart"></canvas></div>
         </div>
         <div class="card">
-            <div class="chart-subtitle">⚖️ 몸무게 (kg)</div>
+            <div class="chart-subtitle">⚖️ 몸무게 (kg) <span style="font-weight:400;font-size:11px;color:var(--text-light)">— 측정일 기준 <span id="weight-note"></span></span></div>
             <div class="chart-wrap"><canvas id="weight-chart"></canvas></div>
         </div>
     </div>
@@ -383,6 +389,7 @@ const TYPES = {
     feces:    { label:'대변',    icon:()=>'💩',  unit:'회',  hasAmt:false },
     fluids:   { label:'피하수액', icon:()=>'💧',  unit:'ml', hasAmt:true  },
     water:    { label:'물마심',  icon:()=>'💦',  unit:'회',  hasAmt:false },
+    play:     { label:'놀았음',  icon:()=>'🧶',  unit:'회',  hasAmt:false },
     weight:   { label:'몸무게',  icon:()=>'⚖️',  unit:'kg', hasAmt:true  },
     dry_food: { label:'건사료',  icon:()=>'🍴',  unit:'g',  hasAmt:true  },
     wet_food: { label:'습식사료', icon:()=>'🥫',  unit:'g',  hasAmt:true  },
@@ -475,6 +482,7 @@ function todayCounts() {
         dry_food: dryFoodConsumed(today()),
         wet_food: rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0),
         churu:    rs.filter(r=>r.type==='churu').length,
+        play:     rs.filter(r=>r.type==='play').length,
     };
 }
 
@@ -511,6 +519,7 @@ function renderHome() {
     document.getElementById('cnt-dry').textContent    = `오늘 ${c.dry_food} g`;
     document.getElementById('cnt-wet').textContent    = `오늘 ${c.wet_food} g`;
     document.getElementById('cnt-churu').textContent  = `오늘 ${c.churu}회`;
+    document.getElementById('cnt-play').textContent   = `오늘 ${c.play}회`;
 
     // 몸무게 버튼: 최근 기록 표시
     const lastW = records.filter(r=>r.type==='weight').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).pop();
@@ -612,7 +621,8 @@ function renderWeeklySummary() {
     const dayList = n => { const a=[]; const [y,mo,d]=today().split('-').map(Number);
         for(let i=0;i<7;i++){ const dt=new Date(y,mo-1,d-n-i); a.push(dateStr(dt)); } return a; };
     const thisWk = dayList(0), lastWk = dayList(7);
-    const foodOf  = ds => dryFoodConsumed(ds) + recsFor(ds).filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0);
+    const dryOf   = ds => dryFoodConsumed(ds);
+    const wetOf   = ds => recsFor(ds).filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0);
     const urineOf = ds => recsFor(ds).filter(r=>r.type==='urine').length;
     const avg = (dates,fn) => { const days=dates.filter(d=>recsFor(d).length>0); if(!days.length) return null;
         return days.reduce((s,d)=>s+fn(d),0)/days.length; };
@@ -635,8 +645,9 @@ function renderWeeklySummary() {
             ${diffHtml}
         </div>`);
     };
-    mkRow('🍽','식사 평균', avg(thisWk,foodOf),  avg(lastWk,foodOf),  'g');
-    mkRow('💛','소변 평균', avg(thisWk,urineOf), avg(lastWk,urineOf), '회');
+    mkRow('🍴','건사료 평균', avg(thisWk,dryOf),   avg(lastWk,dryOf),   'g');
+    mkRow('🥫','습식 평균',  avg(thisWk,wetOf),   avg(lastWk,wetOf),   'g');
+    mkRow('💛','소변 평균',  avg(thisWk,urineOf), avg(lastWk,urineOf), '회');
 
     // 몸무게: 최근 2개 기록 비교
     const ws = records.filter(r=>r.type==='weight').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
@@ -1157,7 +1168,7 @@ function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 // ═══════════════════════════════════════════
 let calDate = new Date();
 let selectedDay = null;
-const CAL_FILTER_KEYS = ['med','toilet','fluids','water','food','memo'];
+const CAL_FILTER_KEYS = ['med','toilet','fluids','water','food','play','memo'];
 let calFilters = new Set(CAL_FILTER_KEYS);
 
 function renderCal() {
@@ -1183,6 +1194,7 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
     const dryFood = dryFoodConsumed(ds);
     const wetFood = rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0);
     const churuCnt= rs.filter(r=>r.type==='churu').length;
+    const playCnt = rs.filter(r=>r.type==='play').length;
     const wRec    = rs.filter(r=>r.type==='weight').pop();
     const memos   = rs.filter(r=>r.type==='memo'&&r.showOnCalendar!==false);
 
@@ -1212,6 +1224,7 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
     if(has('food')&&dryFood>0)   lines.push(`🍴${dryFood}g`);
     if(has('food')&&wetFood>0)   lines.push(`🥫${wetFood}g`);
     if(has('food')&&churuCnt>0)  lines.push(`🍭츄르${churuCnt}`);
+    if(has('play')&&playCnt>0)   lines.push(`🧶${playCnt}회`);
     if(has('memo')) memos.forEach(m=>lines.push(`⭐${m.title.slice(0,4)}`));
     if(wRec) lines.push(`⚖️${wRec.amt}kg`);
 
@@ -1376,6 +1389,15 @@ function openAddForDate(ds) {
             </button>
             <button class="modal-type-btn" onclick="closeModal();openRecordModal('wet_food','${ds}')">
                 <span style="font-size:22px">🥫</span> 습식사료
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openSnackModal('${ds}')">
+                <span style="font-size:22px">🍭</span> 간식
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('play','${ds}')">
+                <span style="font-size:22px">🧶</span> 놀았음
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('weight','${ds}')">
+                <span style="font-size:22px">⚖️</span> 몸무게
             </button>
             <button class="modal-type-btn" onclick="closeModal();openMemoModal(null,'${ds}')" style="border-color:var(--primary-light);color:var(--primary-dark)">
                 <span style="font-size:22px">📝</span> 메모
@@ -1550,11 +1572,20 @@ function renderGraphs() {
     const fluids=dates.map(d=>recsFor(d).filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0));
     makeChart('fluids-chart','fluids',labels,[{label:'피하수액(ml)',data:fluids,backgroundColor:'#80DEEA',borderRadius:4}],'bar');
     // 몸무게: 기록이 있는 날만 점으로, 사이는 선으로 연결
-    const weightData=dates.map(d=>{ const w=recsFor(d).filter(r=>r.type==='weight').pop(); return w?w.amt:null; });
+    // 몸무게: 측정한 날짜만 x축에 (빈 셀 없음). 기간 필터와 무관하게 최근 20회 측정치를 표시
+    const wByDate = {};
+    records.filter(r=>r.type==='weight')
+        .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))
+        .forEach(r=>{ wByDate[r.date]=r.amt; });          // 같은 날 여러 번이면 마지막 값
+    const wDates  = Object.keys(wByDate).sort().slice(-20);
+    const wLabels = wDates.map(d=>{ const p=d.split('-'); return `${+p[1]}/${+p[2]}`; });
+    const wVals   = wDates.map(d=>wByDate[d]);
     if(charts.weight){charts.weight.destroy();delete charts.weight;}
     const wctx=document.getElementById('weight-chart');
+    const wNote=document.getElementById('weight-note');
+    if(wNote) wNote.textContent = wDates.length ? `측정 ${wDates.length}회` : '기록 없음';
     if(wctx) charts.weight=new Chart(wctx,{type:'line',
-        data:{labels,datasets:[{label:'몸무게(kg)',data:weightData,borderColor:'#9B8EC4',backgroundColor:'#C4B8E8',spanGaps:true,tension:.3,pointRadius:4,borderWidth:2}]},
+        data:{labels:wLabels,datasets:[{label:'몸무게(kg)',data:wVals,borderColor:'#9B8EC4',backgroundColor:'#C4B8E8',tension:.3,pointRadius:4,borderWidth:2}]},
         options:{...CHART_OPT,scales:{x:CHART_OPT.scales.x,y:{beginAtZero:false,ticks:{font:{size:10}}}}}});
 }
 function makeChart(canvasId, key, labels, datasets, type) {
