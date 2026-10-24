@@ -430,6 +430,8 @@ function today() { const n=new Date(); if(n.getHours()<6) n.setDate(n.getDate()-
 function nowTime() { const n=new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}`; }
 // 시간 정렬: 06:00 시작 기준 (00:00~05:59 는 하루의 끝쪽)
 function tCmp(a,b) { const k=t=>(t<'06:00'?'2':'1')+t; return k(a.time).localeCompare(k(b.time)); }
+// 날짜까지 포함한 정렬 키 (여러 날에 걸친 기록을 시간순으로 줄 세울 때)
+function dayKey(r) { return r.date + (r.time < '06:00' ? '2' : '1') + r.time; }
 function fmtTime(t) { const [h,m]=t.split(':').map(Number); return `${h<12?'오전':'오후'} ${h===0?12:h>12?h-12:h}:${pad(m)}`; }
 function fmtDate(s) { const [y,mo,d]=s.split('-').map(Number); const days=['일','월','화','수','목','금','토']; return `${y}년 ${mo}월 ${d}일 (${days[new Date(y,mo-1,d).getDay()]})`; }
 
@@ -453,7 +455,7 @@ function pendingDryFoodServing(upToDate) {
     const events = records
         .filter(r=>r.type==='dry_food'&&['serve','finish','leftover','discard'].includes(r.subtype))
         .filter(r=>!upToDate || r.date <= upToDate)
-        .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+        .sort((a,b)=>dayKey(a).localeCompare(dayKey(b)));
     let pending = 0;
     events.forEach(r=>{
         if (r.subtype==='serve')                                          pending += (r.amt||0);
@@ -822,7 +824,7 @@ function openDryFoodLeftoverModal(ds, servingAmt) {
             누적 급여량 <strong>${servingAmt}g</strong><br>
             <span style="color:var(--text-light);font-size:13px">
                 · ${ds} <strong>23:59</strong> 기준으로 섭취량 기록<br>
-                · 남은량은 <strong>${nextDs} 00:00</strong> 급여로 자동 이월
+                · 남은량은 <strong>${nextDs} 06:00</strong> 급여로 자동 이월
             </span>
         </div>
         <div class="form-group">
@@ -890,10 +892,10 @@ function saveDryFoodLeftover(ds, servingAmt) {
     const consumed = Math.max(0, servingAmt - amt);
     // ① 해당 날짜 23:59에 남은량 기록
     records.push({id:uid(), type:'dry_food', subtype:'leftover', amt, servingAmt, date, time:'23:59'});
-    // ② 남은량이 있으면 다음날 00:00 급여로 자동 이월
+    // ② 남은량이 있으면 다음날 급여로 자동 이월 (하루 시작인 06:00)
     if (amt > 0) {
         const nextDs = dateStr(new Date(new Date(date+'T00:00:00').getTime() + 86400000));
-        records.push({id:uid(), type:'dry_food', subtype:'serve', amt, date:nextDs, time:'00:00'});
+        records.push({id:uid(), type:'dry_food', subtype:'serve', amt, date:nextDs, time:'06:00'});
     }
     saveRecords(); closeModal(); renderCal();
     if (currentView==='home') renderHome();
