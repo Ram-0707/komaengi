@@ -235,8 +235,13 @@
                     <span class="btn-label">놀았음</span>
                     <span class="btn-count" id="cnt-play">오늘 0회</span>
                 </button>
-                <button class="record-btn" onclick="openRecordModal('weight')" style="grid-column:span 2;flex-direction:row;min-height:44px;gap:8px;padding:8px">
-                    <span class="btn-icon" style="font-size:18px">⚖️</span>
+                <button class="record-btn" onclick="openCollectModal()">
+                    <span class="btn-icon">🧹</span>
+                    <span class="btn-label">수거량</span>
+                    <span class="btn-count" id="cnt-collect">오늘 0 g</span>
+                </button>
+                <button class="record-btn" onclick="openRecordModal('weight')">
+                    <span class="btn-icon">⚖️</span>
                     <span class="btn-label">몸무게</span>
                     <span class="btn-count" id="cnt-weight"></span>
                 </button>
@@ -281,6 +286,7 @@
                 <button class="cal-filter-btn" data-filter="none" onclick="setCalFilter('none')">전체해제</button>
                 <button class="cal-filter-btn active" data-filter="med" onclick="setCalFilter('med')">💊 투약</button>
                 <button class="cal-filter-btn active" data-filter="toilet" onclick="setCalFilter('toilet')">💛💩 대소변</button>
+                <button class="cal-filter-btn active" data-filter="collect" onclick="setCalFilter('collect')">🧹 수거량</button>
                 <button class="cal-filter-btn active" data-filter="fluids" onclick="setCalFilter('fluids')">💧 피하수액</button>
                 <button class="cal-filter-btn active" data-filter="water" onclick="setCalFilter('water')">💦 물마심</button>
                 <button class="cal-filter-btn active" data-filter="food" onclick="setCalFilter('food')">🍴🥫 사료</button>
@@ -311,6 +317,10 @@
         <div class="card">
             <div class="chart-subtitle">💛💩 소변 · 대변 (회)</div>
             <div class="chart-wrap"><canvas id="toilet-chart"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="chart-subtitle">🧹 수거량 (g)</div>
+            <div class="chart-wrap"><canvas id="collect-chart"></canvas></div>
         </div>
         <div class="card">
             <div class="chart-subtitle">💧 피하수액 (ml)</div>
@@ -387,6 +397,8 @@ const DROP = (h=22) => { const w=Math.round(h*20/28); return `<svg width="${w}" 
 const TYPES = {
     urine:    { label:'소변',    icon:()=>'💛',  unit:'회',  hasAmt:false },
     feces:    { label:'대변',    icon:()=>'💩',  unit:'회',  hasAmt:false },
+    urine_amt:{ label:'소변 수거', icon:()=>'💛', unit:'g',  hasAmt:true  },
+    feces_amt:{ label:'대변 수거', icon:()=>'💩', unit:'g',  hasAmt:true  },
     fluids:   { label:'피하수액', icon:()=>'💧',  unit:'ml', hasAmt:true  },
     water:    { label:'물마심',  icon:()=>'💦',  unit:'회',  hasAmt:false },
     play:     { label:'놀았음',  icon:()=>'🧶',  unit:'회',  hasAmt:false },
@@ -485,6 +497,8 @@ function todayCounts() {
         wet_food: rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0),
         churu:    rs.filter(r=>r.type==='churu').length,
         play:     rs.filter(r=>r.type==='play').length,
+        urine_amt:rs.filter(r=>r.type==='urine_amt').reduce((s,r)=>s+(r.amt||0),0),
+        feces_amt:rs.filter(r=>r.type==='feces_amt').reduce((s,r)=>s+(r.amt||0),0),
     };
 }
 
@@ -523,10 +537,15 @@ function renderHome() {
     document.getElementById('cnt-churu').textContent  = `오늘 ${c.churu}회`;
     document.getElementById('cnt-play').textContent   = `오늘 ${c.play}회`;
 
+    // 수거량 버튼: 소변/대변 합산 (둘 다 있으면 나눠서)
+    const cu = c.urine_amt, cf = c.feces_amt;
+    document.getElementById('cnt-collect').textContent =
+        (cu||cf) ? `💛${cu} 💩${cf} g` : '오늘 0 g';
+
     // 몸무게 버튼: 최근 기록 표시
     const lastW = records.filter(r=>r.type==='weight').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).pop();
     document.getElementById('cnt-weight').textContent = lastW
-        ? `최근 ${lastW.amt}kg (${+lastW.date.split('-')[1]}/${+lastW.date.split('-')[2]})` : '기록하기';
+        ? `${lastW.amt}kg (${+lastW.date.split('-')[1]}/${+lastW.date.split('-')[2]})` : '기록하기';
 
     renderWeeklySummary();
 
@@ -938,6 +957,61 @@ function saveDryFoodDiscard(ds, servingAmt) {
     toast(`잔반 비움 기록 완료 (${servingAmt}g 폐기)`);
 }
 
+// ─── 수거량 모달 (화장실에서 수거한 소변/대변 무게) ───
+function openCollectModal(defaultDate) {
+    const ds = defaultDate || today();
+    setModal('🧹 수거량 기록', `
+        <p style="font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:12px">
+            화장실에서 수거한 무게를 입력하세요.<br>둘 중 하나만 입력해도 됩니다.
+        </p>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div style="flex:1">
+                <label class="form-label">💛 소변 (g)</label>
+                <input type="number" class="form-input" id="col-urine" min="0" step="any" placeholder="0" inputmode="decimal" autocomplete="off">
+            </div>
+            <div style="flex:1">
+                <label class="form-label">💩 대변 (g)</label>
+                <input type="number" class="form-input" id="col-feces" min="0" step="any" placeholder="0" inputmode="decimal" autocomplete="off">
+            </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div style="flex:1">
+                <label class="form-label">날짜</label>
+                <input type="date" class="form-input" id="col-date" value="${ds}">
+            </div>
+            <div style="flex:1">
+                <label class="form-label">시간</label>
+                <input type="time" class="form-input" id="col-time" value="${nowTime()}">
+            </div>
+        </div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModal()">취소</button>
+            <button class="btn-confirm" onclick="saveCollect()">기록하기</button>
+        </div>
+    `);
+    openModal();
+    setTimeout(()=>document.getElementById('col-urine')?.focus(), 120);
+}
+
+function saveCollect() {
+    const u = parseFloat(document.getElementById('col-urine')?.value);
+    const f = parseFloat(document.getElementById('col-feces')?.value);
+    const hasU = !isNaN(u) && u > 0, hasF = !isNaN(f) && f > 0;
+    if (!hasU && !hasF) { alert('소변 또는 대변 수거량을 입력해 주세요.'); return; }
+    const date = document.getElementById('col-date')?.value || today();
+    const time = document.getElementById('col-time')?.value || nowTime();
+    if (hasU) records.push({id:uid(), type:'urine_amt', amt:u, date, time});
+    if (hasF) records.push({id:uid(), type:'feces_amt', amt:f, date, time});
+    saveRecords(); closeModal(); renderCal();
+    if (currentView==='home') renderHome();
+    if (currentView==='graph') renderGraphs();
+    if (selectedDay===date) openDayDetail(date);
+    const parts = [];
+    if (hasU) parts.push(`소변 ${u}g`);
+    if (hasF) parts.push(`대변 ${f}g`);
+    toast(`수거량 기록 완료! (${parts.join(', ')})`);
+}
+
 // ─── 간식 모달 ───
 function openSnackModal(defaultDate) {
     const ds = defaultDate || today();
@@ -1170,7 +1244,7 @@ function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 // ═══════════════════════════════════════════
 let calDate = new Date();
 let selectedDay = null;
-const CAL_FILTER_KEYS = ['med','toilet','fluids','water','food','play','memo'];
+const CAL_FILTER_KEYS = ['med','toilet','collect','fluids','water','food','play','memo'];
 let calFilters = new Set(CAL_FILTER_KEYS);
 
 function renderCal() {
@@ -1197,6 +1271,8 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
     const wetFood = rs.filter(r=>r.type==='wet_food').reduce((s,r)=>s+(r.amt||0),0);
     const churuCnt= rs.filter(r=>r.type==='churu').length;
     const playCnt = rs.filter(r=>r.type==='play').length;
+    const uAmt    = rs.filter(r=>r.type==='urine_amt').reduce((s,r)=>s+(r.amt||0),0);
+    const fAmt    = rs.filter(r=>r.type==='feces_amt').reduce((s,r)=>s+(r.amt||0),0);
     const wRec    = rs.filter(r=>r.type==='weight').pop();
     const memos   = rs.filter(r=>r.type==='memo'&&r.showOnCalendar!==false);
 
@@ -1227,6 +1303,7 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
     if(has('food')&&wetFood>0)   lines.push(`🥫${wetFood}g`);
     if(has('food')&&churuCnt>0)  lines.push(`🍭츄르${churuCnt}`);
     if(has('play')&&playCnt>0)   lines.push(`🧶${playCnt}회`);
+    if(has('collect')&&(uAmt>0||fAmt>0)) lines.push(`🧹${uAmt>0?'💛'+uAmt:''}${fAmt>0?' 💩'+fAmt:''}`);
     if(has('memo')) memos.forEach(m=>lines.push(`⭐${m.title.slice(0,4)}`));
     if(wRec) lines.push(`⚖️${wRec.amt}kg`);
 
@@ -1397,6 +1474,9 @@ function openAddForDate(ds) {
             </button>
             <button class="modal-type-btn" onclick="closeModal();openRecordModal('play','${ds}')">
                 <span style="font-size:22px">🧶</span> 놀았음
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openCollectModal('${ds}')">
+                <span style="font-size:22px">🧹</span> 수거량
             </button>
             <button class="modal-type-btn" onclick="closeModal();openRecordModal('weight','${ds}')">
                 <span style="font-size:22px">⚖️</span> 몸무게
@@ -1570,6 +1650,14 @@ function renderGraphs() {
     makeChart('toilet-chart','toilet',labels,[
         {label:'소변(회)',data:urine,backgroundColor:'#FFD700',borderRadius:4},
         {label:'대변(회)',data:feces,backgroundColor:'#A0785A',borderRadius:4},
+    ],'bar');
+    // 수거량 (g) — 화장실에서 수거한 소변/대변 무게
+    const sumBy = (d,t) => recsFor(d).filter(r=>r.type===t).reduce((s,r)=>s+(r.amt||0),0);
+    const uAmt=dates.map(d=>sumBy(d,'urine_amt'));
+    const fAmt=dates.map(d=>sumBy(d,'feces_amt'));
+    makeChart('collect-chart','collect',labels,[
+        {label:'소변 수거(g)',data:uAmt,backgroundColor:'#FFD700',borderRadius:4},
+        {label:'대변 수거(g)',data:fAmt,backgroundColor:'#A0785A',borderRadius:4},
     ],'bar');
     const fluids=dates.map(d=>recsFor(d).filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0));
     makeChart('fluids-chart','fluids',labels,[{label:'피하수액(ml)',data:fluids,backgroundColor:'#80DEEA',borderRadius:4}],'bar');
