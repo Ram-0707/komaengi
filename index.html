@@ -54,14 +54,14 @@
         .record-btn .btn-count { font-size:9.5px; color:var(--text-light); white-space:nowrap; }
 
         /* ─── Medication List ─── */
-        .med-item { display:flex; align-items:center; padding:11px 0; border-bottom:1px solid var(--border); gap:12px; }
+        .med-item { display:flex; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); gap:9px; }
         .med-item:last-child { border-bottom:none; padding-bottom:0; }
         .med-item:first-child { padding-top:0; }
-        .med-check-btn { width:42px; height:42px; border-radius:50%; border:2.5px solid var(--border); background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px; transition:all .18s; flex-shrink:0; }
+        .med-check-btn { width:26px; height:26px; border-radius:50%; border:2px solid var(--border); background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all .18s; flex-shrink:0; }
         .med-check-btn.done { background:var(--success); border-color:var(--success); color:white; }
-        .med-info { flex:1; min-width:0; }
-        .med-name { font-size:15px; font-weight:600; }
-        .med-period { font-size:12px; color:var(--text-light); margin-top:2px; }
+        .med-info { flex:1; min-width:0; display:flex; align-items:baseline; gap:6px; }
+        .med-name { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .med-period { font-size:11.5px; color:var(--text-light); white-space:nowrap; flex-shrink:0; }
         .med-badge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
         .med-badge.done { background:#E8F5EE; color:var(--success); }
         .med-badge.pending { background:#FFF8EE; color:var(--warning); }
@@ -245,6 +245,11 @@
                     <span class="btn-label">몸무게</span>
                     <span class="btn-count" id="cnt-weight"></span>
                 </button>
+                <button class="record-btn" onclick="openRecordModal('resp')" style="grid-column:span 3;flex-direction:row;min-height:44px;gap:8px;padding:8px">
+                    <span class="btn-icon" style="font-size:18px">🫁</span>
+                    <span class="btn-label">분당 호흡수</span>
+                    <span class="btn-count" id="cnt-resp"></span>
+                </button>
             </div>
         </div>
 
@@ -330,6 +335,10 @@
             <div class="chart-subtitle">⚖️ 몸무게 (kg) <span style="font-weight:400;font-size:11px;color:var(--text-light)">— 측정일 기준 <span id="weight-note"></span></span></div>
             <div class="chart-wrap"><canvas id="weight-chart"></canvas></div>
         </div>
+        <div class="card">
+            <div class="chart-subtitle">🫁 분당 호흡수 (회/분) <span style="font-weight:400;font-size:11px;color:var(--text-light)">— 측정일 기준 <span id="resp-note"></span></span></div>
+            <div class="chart-wrap"><canvas id="resp-chart"></canvas></div>
+        </div>
     </div>
 
     <!-- ── 특이사항 ── -->
@@ -403,6 +412,7 @@ const TYPES = {
     water:    { label:'물마심',  icon:()=>'💦',  unit:'회',  hasAmt:false },
     play:     { label:'놀았음',  icon:()=>'🧶',  unit:'회',  hasAmt:false },
     weight:   { label:'몸무게',  icon:()=>'⚖️',  unit:'kg', hasAmt:true  },
+    resp:     { label:'호흡수',  icon:()=>'🫁',  unit:'회/분', hasAmt:true },
     dry_food: { label:'건사료',  icon:()=>'🍴',  unit:'g',  hasAmt:true  },
     wet_food: { label:'습식사료', icon:()=>'🥫',  unit:'g',  hasAmt:true  },
     churu:    { label:'츄르',    icon:()=>'🍭',  unit:'회',  hasAmt:false },
@@ -542,10 +552,12 @@ function renderHome() {
     document.getElementById('cnt-collect').textContent =
         (cu||cf) ? `💛${cu}개 💩${cf}개` : '오늘 없음';
 
-    // 몸무게 버튼: 최근 기록 표시
-    const lastW = records.filter(r=>r.type==='weight').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).pop();
-    document.getElementById('cnt-weight').textContent = lastW
-        ? `${lastW.amt}kg (${+lastW.date.split('-')[1]}/${+lastW.date.split('-')[2]})` : '기록하기';
+    // 몸무게 · 호흡수 버튼: 최근 기록 표시
+    const lastOf = t => records.filter(r=>r.type===t).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).pop();
+    const md = s => `${+s.split('-')[1]}/${+s.split('-')[2]}`;
+    const lastW = lastOf('weight'), lastR = lastOf('resp');
+    document.getElementById('cnt-weight').textContent = lastW ? `${lastW.amt}kg (${md(lastW.date)})` : '기록하기';
+    document.getElementById('cnt-resp').textContent   = lastR ? `최근 ${lastR.amt}회/분 (${md(lastR.date)})` : '기록하기';
 
     renderWeeklySummary();
 
@@ -561,12 +573,10 @@ function renderHome() {
             const done = isMedDone(med.id, p, today());
             const rec = records.find(r=>r.type==='med'&&r.medId===med.id&&r.period===p&&r.date===today());
             return `<div class="med-item">
-                <button class="med-check-btn ${done?'done':''}" onclick="toggleMed('${med.id}','${p}')">
-                    ${done?'✓':''}
-                </button>
+                <button class="med-check-btn ${done?'done':''}" onclick="toggleMed('${med.id}','${p}')">${done?'✓':''}</button>
                 <div class="med-info">
-                    <div class="med-name">${med.name}</div>
-                    <div class="med-period">${PERIODS[p]||p}${done&&rec?.time?` · ${fmtTime(rec.time)}`:''}</div>
+                    <span class="med-name">${med.name}</span>
+                    <span class="med-period">${PERIODS[p]||p}${done&&rec?.time?` · ${fmtTime(rec.time)}`:''}</span>
                 </div>
                 <span class="med-badge ${done?'done':'pending'}">${done?'완료':'미완료'}</span>
             </div>`;
@@ -607,6 +617,7 @@ function renderHome() {
                     <div style="display:flex;align-items:baseline;gap:10px;width:100%">
                         ${timeHtml}
                         <div style="flex:1">${icon} <span class="tl-label">${titleText}</span></div>
+                        <button class="rec-del-btn" style="color:var(--primary)" onclick="openMemoModal('${r.id}')">✎</button>
                         <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
                     </div>
                     ${r.body?`<div style="font-size:12px;color:var(--text-light);line-height:1.5;padding-left:64px;white-space:pre-wrap">${escHtml(r.body)}</div>`:''}
@@ -1274,6 +1285,7 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
     const uAmt    = rs.filter(r=>r.type==='urine_amt').reduce((s,r)=>s+(r.amt||0),0);
     const fAmt    = rs.filter(r=>r.type==='feces_amt').reduce((s,r)=>s+(r.amt||0),0);
     const wRec    = rs.filter(r=>r.type==='weight').pop();
+    const rRec    = rs.filter(r=>r.type==='resp').pop();
     const memos   = rs.filter(r=>r.type==='memo'&&r.showOnCalendar!==false);
 
     let cls='cal-day';
@@ -1284,7 +1296,23 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
 
     let lines=[];
     const has = k => calFilters.has(k);
-    // 투약
+    // 표시 순서: 특이사항 → 피하수액 → 대소변 → 수거량 → 식사 → 나머지
+    // ① 특이사항
+    if(has('memo')) memos.forEach(m=>lines.push(`⭐${m.title.slice(0,4)}`));
+    // ② 피하수액
+    if(has('fluids')&&fluids>0)  lines.push(`💧${fluids}ml`);
+    // ③ 대소변 (횟수)
+    let toiletLine='';
+    if(has('toilet')&&urine>0) toiletLine+=`💛${urine}`;
+    if(has('toilet')&&feces>0) toiletLine+=(toiletLine?' ':'')+`💩${feces}`;
+    if(toiletLine) lines.push(toiletLine);
+    // ④ 수거량 (빗자루 + 아이콘만, 단위 생략)
+    if(has('collect')&&(uAmt>0||fAmt>0)) lines.push(`🧹${uAmt>0?'💛'+uAmt:''}${fAmt>0?' 💩'+fAmt:''}`);
+    // ⑤ 식사
+    if(has('food')&&dryFood>0)   lines.push(`🍴${dryFood}g`);
+    if(has('food')&&wetFood>0)   lines.push(`🥫${wetFood}g`);
+    if(has('food')&&churuCnt>0)  lines.push(`🍭츄르${churuCnt}`);
+    // ⑥ 나머지
     if (has('med')) {
         meds.forEach(med=>{
             const total=med.periods.length;
@@ -1292,20 +1320,10 @@ function calDayHtml(ds, dayNum, other, isSun, isSat, isToday) {
             if(done>0){ const short=med.name.slice(0,4); lines.push(`${short} ${done}/${total}`); }
         });
     }
-    // 소변/대변
-    let toiletLine='';
-    if(has('toilet')&&urine>0) toiletLine+=`💛${urine}`;
-    if(has('toilet')&&feces>0) toiletLine+=(toiletLine?' ':'')+`💩${feces}`;
-    if(toiletLine) lines.push(toiletLine);
-    if(has('fluids')&&fluids>0)  lines.push(`💧${fluids}ml`);
     if(has('water')&&water>0)    lines.push(`💦${water}회`);
-    if(has('food')&&dryFood>0)   lines.push(`🍴${dryFood}g`);
-    if(has('food')&&wetFood>0)   lines.push(`🥫${wetFood}g`);
-    if(has('food')&&churuCnt>0)  lines.push(`🍭츄르${churuCnt}`);
     if(has('play')&&playCnt>0)   lines.push(`🧶${playCnt}회`);
-    if(has('collect')&&(uAmt>0||fAmt>0)) lines.push(`🧹${uAmt>0?'💛'+uAmt+'개':''}${fAmt>0?' 💩'+fAmt+'개':''}`);
-    if(has('memo')) memos.forEach(m=>lines.push(`⭐${m.title.slice(0,4)}`));
     if(wRec) lines.push(`⚖️${wRec.amt}kg`);
+    if(rRec) lines.push(`🫁${rRec.amt}`);
 
     return `<div class="${cls}" onclick="openDayDetail('${ds}')">
         <div class="cal-day-num">${dayNum}</div>
@@ -1337,9 +1355,10 @@ function openDayDetail(ds) {
     const panel  = document.getElementById('day-detail-panel');
     const content = document.getElementById('day-detail-content');
 
-    const rs = recsFor(ds).filter(r=>r.type!=='med'&&r.type!=='memo').sort(tCmp);
-    const memoRecs = recsFor(ds).filter(r=>r.type==='memo').sort(tCmp);
-    const adHocMeds = recsFor(ds).filter(r=>r.type==='med'&&r.medId===null).sort(tCmp);
+    // 메모를 포함한 전체 기록을 시간순으로 (홈 화면과 동일)
+    const rs = recsFor(ds).sort(tCmp);
+    const memoRecs = recsFor(ds).filter(r=>r.type==='memo');
+    const adHocMeds = recsFor(ds).filter(r=>r.type==='med'&&r.medId===null);
     const activeMeds = meds.filter(m=>m.active);
 
     let h = `<div class="day-detail-header">
@@ -1351,25 +1370,7 @@ function openDayDetail(ds) {
         </div>
     </div>`;
 
-    // ① 메모 (최상단)
-    if (memoRecs.length) {
-        h += `<div class="detail-section-label">📝 메모</div>`;
-        memoRecs.forEach(r=>{
-            const isSpecial = r.showOnCalendar !== false;
-            const icon = isSpecial ? '⭐' : '📝';
-            const titleText = r.title || (isSpecial ? '특이사항' : '메모');
-            h+=`<div class="detail-item" style="flex-direction:column;align-items:flex-start;gap:4px">
-                <div style="display:flex;width:100%;align-items:center;gap:8px">
-                    <span style="font-size:14px;font-weight:700;flex:1">${icon} ${escHtml(titleText)}</span>
-                    <button class="detail-time-btn" onclick="openMemoModal('${r.id}')" style="color:var(--primary-dark)">수정</button>
-                    <button class="rec-del-btn" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
-                </div>
-                ${r.body?`<div style="font-size:13px;color:var(--text-light);line-height:1.5;width:100%">${escHtml(r.body)}</div>`:''}
-            </div>`;
-        });
-    }
-
-    // ② 투약
+    // ① 투약
     const inactiveMedsWithRec = meds.filter(m=>!m.active&&m.periods.some(p=>isMedDone(m.id,p,ds)));
     if (activeMeds.length || adHocMeds.length || inactiveMedsWithRec.length) {
         h += `<div class="detail-section-label">💊 투약</div>`;
@@ -1389,14 +1390,6 @@ function openDayDetail(ds) {
                 <span class="med-badge ${done?'done':'pending'}">${done?'완료':'미완료'}</span>
             </div>`;
         });
-        adHocMeds.forEach(r=>{
-            h+=`<div class="detail-item">
-                <span style="font-size:20px;width:34px;text-align:center;flex-shrink:0">💊</span>
-                <span style="flex:1;font-size:14px">${escHtml(r.medName||'투약')} <span style="color:var(--text-light);font-size:12px">(직접 입력)</span></span>
-                <span style="font-size:12px;color:var(--text-light)">${fmtTime(r.time)}</span>
-                <button class="rec-del-btn" style="margin-left:6px" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
-            </div>`;
-        });
         inactiveMedsWithRec.forEach(med=>sortedPeriods(med.periods).forEach(p=>{
             if(!isMedDone(med.id,p,ds)) return;
             h+=`<div class="detail-item" style="opacity:.6">
@@ -1407,10 +1400,36 @@ function openDayDetail(ds) {
         }));
     }
 
-    // ③ 일반 기록
+    // ② 기록 — 메모·투약 포함 전체를 시간순으로 (홈 화면과 동일)
     if (rs.length) {
         h += `<div class="detail-section-label">📋 기록</div>`;
         rs.forEach(r=>{
+            const timeHtml = `<span class="tl-time">${fmtTime(r.time)}</span>`;
+            if (r.type === 'memo') {
+                const isSpecial = r.showOnCalendar !== false;
+                const icon = isSpecial ? '⭐' : '📝';
+                const titleText = r.title ? escHtml(r.title) : (isSpecial ? '특이사항' : '메모');
+                h+=`<div class="tl-item" style="flex-direction:column;align-items:flex-start;gap:2px">
+                    <div style="display:flex;align-items:baseline;gap:10px;width:100%">
+                        ${timeHtml}
+                        <div style="flex:1">${icon} <span class="tl-label">${titleText}</span></div>
+                        <button class="rec-del-btn" style="color:var(--primary)" onclick="openMemoModal('${r.id}')">✎</button>
+                        <button class="rec-del-btn" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
+                    </div>
+                    ${r.body?`<div style="font-size:12px;color:var(--text-light);line-height:1.5;padding-left:64px;white-space:pre-wrap">${escHtml(r.body)}</div>`:''}
+                </div>`;
+                return;
+            }
+            if (r.type === 'med') {
+                const medName = r.medName || (meds.find(m=>m.id===r.medId)?.name) || '투약';
+                const periodLabel = r.period ? (PERIODS[r.period]||r.period) : '직접입력';
+                h+=`<div class="tl-item">
+                    ${timeHtml}
+                    <div class="tl-label" style="flex:1">💊 ${escHtml(medName)} <span class="tl-med">(${periodLabel})</span></div>
+                    ${r.medId===null?`<button class="rec-del-btn" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>`:''}
+                </div>`;
+                return;
+            }
             let iconHtml, labelText;
             if (r.type==='dry_food' && r.subtype) {
                 const info = dryFoodEventInfo(r);
@@ -1418,18 +1437,18 @@ function openDayDetail(ds) {
             } else {
                 const t=TYPES[r.type];
                 iconHtml = t.icon();
-                labelText = t.label + (t.hasAmt?` — ${r.amt}${t.unit}`:'');
+                labelText = t.label + (t.hasAmt?` ${r.amt}${t.unit}`:'');
             }
-            h+=`<div class="detail-item">
-                <span style="font-size:20px;width:26px;text-align:center;flex-shrink:0;display:flex;align-items:center">${iconHtml}</span>
-                <span style="flex:1;font-size:14px">${labelText}</span>
-                <button class="detail-time-btn" onclick="editRecordTime('${r.id}','${r.time}','${ds}')">${fmtTime(r.time)}</button>
-                <button class="rec-del-btn" style="margin-left:4px" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
+            h+=`<div class="tl-item">
+                ${timeHtml}
+                <div class="tl-label" style="flex:1">${iconHtml} ${labelText}</div>
+                <button class="rec-del-btn" style="color:var(--primary)" onclick="editRecordTime('${r.id}','${r.time}','${ds}')">✎</button>
+                <button class="rec-del-btn" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
             </div>`;
         });
     }
 
-    if (!memoRecs.length && !activeMeds.length && !adHocMeds.length && !rs.length) {
+    if (!activeMeds.length && !rs.length) {
         h += `<div class="empty"><div class="empty-icon">📋</div>기록이 없습니다.<br><button class="add-btn" style="margin-top:12px" onclick="openAddForDate('${ds}')">+ 기록 추가하기</button></div>`;
     }
 
@@ -1480,6 +1499,9 @@ function openAddForDate(ds) {
             </button>
             <button class="modal-type-btn" onclick="closeModal();openRecordModal('weight','${ds}')">
                 <span style="font-size:22px">⚖️</span> 몸무게
+            </button>
+            <button class="modal-type-btn" onclick="closeModal();openRecordModal('resp','${ds}')">
+                <span style="font-size:22px">🫁</span> 분당 호흡수
             </button>
             <button class="modal-type-btn" onclick="closeModal();openMemoModal(null,'${ds}')" style="border-color:var(--primary-light);color:var(--primary-dark)">
                 <span style="font-size:22px">📝</span> 메모
@@ -1661,21 +1683,26 @@ function renderGraphs() {
     ],'bar');
     const fluids=dates.map(d=>recsFor(d).filter(r=>r.type==='fluids').reduce((s,r)=>s+(r.amt||0),0));
     makeChart('fluids-chart','fluids',labels,[{label:'피하수액(ml)',data:fluids,backgroundColor:'#80DEEA',borderRadius:4}],'bar');
-    // 몸무게: 기록이 있는 날만 점으로, 사이는 선으로 연결
-    // 몸무게: 측정한 날짜만 x축에 (빈 셀 없음). 기간 필터와 무관하게 최근 20회 측정치를 표시
-    const wByDate = {};
-    records.filter(r=>r.type==='weight')
+    // 몸무게 · 호흡수: 측정한 날짜만 x축에 (빈 셀 없음). 기간 필터와 무관하게 최근 20회
+    measuredChart('weight', 'weight-chart', 'weight-note', '몸무게(kg)', '#9B8EC4');
+    measuredChart('resp',   'resp-chart',   'resp-note',   '호흡수(회/분)', '#64B5F6');
+}
+
+// 측정일 기준 꺾은선 차트 (같은 날 여러 번이면 마지막 값, 최근 20회)
+function measuredChart(type, canvasId, noteId, label, color) {
+    const byDate = {};
+    records.filter(r=>r.type===type)
         .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))
-        .forEach(r=>{ wByDate[r.date]=r.amt; });          // 같은 날 여러 번이면 마지막 값
-    const wDates  = Object.keys(wByDate).sort().slice(-20);
-    const wLabels = wDates.map(d=>{ const p=d.split('-'); return `${+p[1]}/${+p[2]}`; });
-    const wVals   = wDates.map(d=>wByDate[d]);
-    if(charts.weight){charts.weight.destroy();delete charts.weight;}
-    const wctx=document.getElementById('weight-chart');
-    const wNote=document.getElementById('weight-note');
-    if(wNote) wNote.textContent = wDates.length ? `측정 ${wDates.length}회` : '기록 없음';
-    if(wctx) charts.weight=new Chart(wctx,{type:'line',
-        data:{labels:wLabels,datasets:[{label:'몸무게(kg)',data:wVals,borderColor:'#9B8EC4',backgroundColor:'#C4B8E8',tension:.3,pointRadius:4,borderWidth:2}]},
+        .forEach(r=>{ byDate[r.date]=r.amt; });
+    const ds   = Object.keys(byDate).sort().slice(-20);
+    const labs = ds.map(d=>{ const p=d.split('-'); return `${+p[1]}/${+p[2]}`; });
+    const vals = ds.map(d=>byDate[d]);
+    if(charts[type]){charts[type].destroy();delete charts[type];}
+    const note=document.getElementById(noteId);
+    if(note) note.textContent = ds.length ? `측정 ${ds.length}회` : '기록 없음';
+    const ctx=document.getElementById(canvasId);
+    if(ctx) charts[type]=new Chart(ctx,{type:'line',
+        data:{labels:labs,datasets:[{label,data:vals,borderColor:color,backgroundColor:color,tension:.3,pointRadius:4,borderWidth:2}]},
         options:{...CHART_OPT,scales:{x:CHART_OPT.scales.x,y:{beginAtZero:false,ticks:{font:{size:10}}}}}});
 }
 function makeChart(canvasId, key, labels, datasets, type) {
