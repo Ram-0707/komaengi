@@ -606,7 +606,9 @@ function renderHome() {
                 const periodLabel = r.period ? (PERIODS[r.period]||r.period) : '직접입력';
                 return `<div class="tl-item">
                     ${timeHtml}
-                    <div class="tl-label">💊 ${escHtml(medName)} <span class="tl-med">(${periodLabel})</span></div>
+                    <div class="tl-label" style="flex:1">💊 ${escHtml(medName)} <span class="tl-med">(${periodLabel})</span></div>
+                    <button class="rec-del-btn" style="color:var(--primary)" onclick="editRecordTime('${r.id}','${r.time}','${t0}')">✎</button>
+                    <button class="rec-del-btn" onclick="delRecord('${r.id}')">✕</button>
                 </div>`;
             }
             if (r.type === 'memo') {
@@ -1426,7 +1428,8 @@ function openDayDetail(ds) {
                 h+=`<div class="tl-item">
                     ${timeHtml}
                     <div class="tl-label" style="flex:1">💊 ${escHtml(medName)} <span class="tl-med">(${periodLabel})</span></div>
-                    ${r.medId===null?`<button class="rec-del-btn" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>`:''}
+                    <button class="rec-del-btn" style="color:var(--primary)" onclick="editRecordTime('${r.id}','${r.time}','${ds}')">✎</button>
+                    <button class="rec-del-btn" onclick="delRecordInDetail('${r.id}','${ds}')">✕</button>
                 </div>`;
                 return;
             }
